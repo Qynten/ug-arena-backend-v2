@@ -1,13 +1,16 @@
 {
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "target": "ES2023",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "sourceMap": true,
     "declaration": true,
-    "declarationMap": true
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "outDir": "./dist",
+    "rootDir": "./"
   }
 }
