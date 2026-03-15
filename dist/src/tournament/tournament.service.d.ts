@@ -6,20 +6,20 @@ export declare class TournamentService {
     constructor(prisma: PrismaService);
     create(createTournamentDto: CreateTournamentDto): Promise<{
         prizePools: {
+            position: import("../generated/prisma/enums").PrizePoolPosition;
+            amount: number;
             id: string;
             metadata: import("@prisma/client/runtime/client").JsonValue | null;
             createdAt: Date;
             updatedAt: Date;
-            position: import("../generated/prisma/enums").PrizePoolPosition;
-            amount: number;
             currency: string;
             payoutStatus: import("../generated/prisma/enums").PayoutStatus;
             winnerId: string | null;
             tournamentId: string;
         }[];
         organizer: {
-            id: string;
             name: string | null;
+            id: string;
             status: import("../generated/prisma/enums").UserStatus;
             createdAt: Date;
             updatedAt: Date;
@@ -32,9 +32,12 @@ export declare class TournamentService {
             isBlocked: boolean;
         };
     } & {
-        id: string;
         name: string;
         description: string;
+        maxParticipants: number;
+        maxTeamSize: number;
+        organizerId: string;
+        id: string;
         type: import("../generated/prisma/enums").TournamentType;
         status: import("../generated/prisma/enums").TournamentStatus;
         regStart: Date | null;
@@ -45,9 +48,7 @@ export declare class TournamentService {
         liveEnd: Date | null;
         checkInStart: Date | null;
         checkInEnd: Date | null;
-        maxParticipants: number;
         minTeamSize: number;
-        maxTeamSize: number;
         bestOf: number;
         allowDraws: boolean;
         logo: string | null;
@@ -55,31 +56,33 @@ export declare class TournamentService {
         isDeleted: boolean;
         createdAt: Date;
         updatedAt: Date;
-        organizerId: string;
     }>;
     findAll(): Promise<({
         prizePools: {
+            position: import("../generated/prisma/enums").PrizePoolPosition;
+            amount: number;
             id: string;
             metadata: import("@prisma/client/runtime/client").JsonValue | null;
             createdAt: Date;
             updatedAt: Date;
-            position: import("../generated/prisma/enums").PrizePoolPosition;
-            amount: number;
             currency: string;
             payoutStatus: import("../generated/prisma/enums").PayoutStatus;
             winnerId: string | null;
             tournamentId: string;
         }[];
         organizer: {
-            id: string;
             name: string | null;
+            id: string;
             email: string;
             photo: string | null;
         };
     } & {
-        id: string;
         name: string;
         description: string;
+        maxParticipants: number;
+        maxTeamSize: number;
+        organizerId: string;
+        id: string;
         type: import("../generated/prisma/enums").TournamentType;
         status: import("../generated/prisma/enums").TournamentStatus;
         regStart: Date | null;
@@ -90,9 +93,7 @@ export declare class TournamentService {
         liveEnd: Date | null;
         checkInStart: Date | null;
         checkInEnd: Date | null;
-        maxParticipants: number;
         minTeamSize: number;
-        maxTeamSize: number;
         bestOf: number;
         allowDraws: boolean;
         logo: string | null;
@@ -100,31 +101,33 @@ export declare class TournamentService {
         isDeleted: boolean;
         createdAt: Date;
         updatedAt: Date;
-        organizerId: string;
     })[]>;
     findOne(id: string): Promise<{
         prizePools: {
+            position: import("../generated/prisma/enums").PrizePoolPosition;
+            amount: number;
             id: string;
             metadata: import("@prisma/client/runtime/client").JsonValue | null;
             createdAt: Date;
             updatedAt: Date;
-            position: import("../generated/prisma/enums").PrizePoolPosition;
-            amount: number;
             currency: string;
             payoutStatus: import("../generated/prisma/enums").PayoutStatus;
             winnerId: string | null;
             tournamentId: string;
         }[];
         organizer: {
-            id: string;
             name: string | null;
+            id: string;
             email: string;
             photo: string | null;
         };
     } & {
-        id: string;
         name: string;
         description: string;
+        maxParticipants: number;
+        maxTeamSize: number;
+        organizerId: string;
+        id: string;
         type: import("../generated/prisma/enums").TournamentType;
         status: import("../generated/prisma/enums").TournamentStatus;
         regStart: Date | null;
@@ -135,9 +138,7 @@ export declare class TournamentService {
         liveEnd: Date | null;
         checkInStart: Date | null;
         checkInEnd: Date | null;
-        maxParticipants: number;
         minTeamSize: number;
-        maxTeamSize: number;
         bestOf: number;
         allowDraws: boolean;
         logo: string | null;
@@ -145,12 +146,14 @@ export declare class TournamentService {
         isDeleted: boolean;
         createdAt: Date;
         updatedAt: Date;
-        organizerId: string;
     }>;
     update(id: string, updateTournamentDto: UpdateTournamentDto): Promise<{
-        id: string;
         name: string;
         description: string;
+        maxParticipants: number;
+        maxTeamSize: number;
+        organizerId: string;
+        id: string;
         type: import("../generated/prisma/enums").TournamentType;
         status: import("../generated/prisma/enums").TournamentStatus;
         regStart: Date | null;
@@ -161,9 +164,7 @@ export declare class TournamentService {
         liveEnd: Date | null;
         checkInStart: Date | null;
         checkInEnd: Date | null;
-        maxParticipants: number;
         minTeamSize: number;
-        maxTeamSize: number;
         bestOf: number;
         allowDraws: boolean;
         logo: string | null;
@@ -171,12 +172,14 @@ export declare class TournamentService {
         isDeleted: boolean;
         createdAt: Date;
         updatedAt: Date;
-        organizerId: string;
     }>;
     remove(id: string): Promise<{
-        id: string;
         name: string;
         description: string;
+        maxParticipants: number;
+        maxTeamSize: number;
+        organizerId: string;
+        id: string;
         type: import("../generated/prisma/enums").TournamentType;
         status: import("../generated/prisma/enums").TournamentStatus;
         regStart: Date | null;
@@ -187,9 +190,7 @@ export declare class TournamentService {
         liveEnd: Date | null;
         checkInStart: Date | null;
         checkInEnd: Date | null;
-        maxParticipants: number;
         minTeamSize: number;
-        maxTeamSize: number;
         bestOf: number;
         allowDraws: boolean;
         logo: string | null;
@@ -197,6 +198,5 @@ export declare class TournamentService {
         isDeleted: boolean;
         createdAt: Date;
         updatedAt: Date;
-        organizerId: string;
     }>;
 }
