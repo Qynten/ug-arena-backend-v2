@@ -5,6 +5,7 @@ export declare class AuthService {
     private configService;
     private jwtService;
     private usersService;
+    private readonly logger;
     constructor(configService: ConfigService, jwtService: JwtService, usersService: UsersService);
     loginWithDiscord(code: string): Promise<{
         accessToken: string;

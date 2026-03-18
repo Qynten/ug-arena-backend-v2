@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
@@ -6,15 +6,19 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private configService: ConfigService,
     private jwtService: JwtService,
     private usersService: UsersService,
-  ) {}
+  ) {
+    this.logger.log('AuthService initialized');
+  }
 
   async loginWithDiscord(code: string) {
     try {
-      console.log('Attempting Discord exchange with code:', code);
+      this.logger.log(`Attempting Discord exchange with code: ${code}`);
 
       const params = new URLSearchParams({
         client_id: this.configService.get<string>('DISCORD_CLIENT_ID')!,
@@ -24,10 +28,10 @@ export class AuthService {
         redirect_uri: this.configService.get<string>('DISCORD_REDIRECT_URI')!,
       });
 
-      console.log('--- CREDENTIAL CHECK ---');
-      console.log('Client ID:', this.configService.get<string>('DISCORD_CLIENT_ID'));
-      console.log('Secret exists?', !!this.configService.get<string>('DISCORD_CLIENT_SECRET'));
-      console.log('------------------------');
+      this.logger.log('--- CREDENTIAL CHECK ---');
+      this.logger.log(`Client ID: ${this.configService.get<string>('DISCORD_CLIENT_ID')}`);
+      this.logger.log(`Secret exists? ${!!this.configService.get<string>('DISCORD_CLIENT_SECRET')}`);
+      this.logger.log('------------------------');
       // 1. Exchange code for access token using native fetch
       const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
         method: 'POST',
@@ -99,7 +103,7 @@ export class AuthService {
         ...tokens,
       };
     } catch (error: any) {
-      console.error('Discord Auth Error:', error.message);
+      this.logger.error(`Discord Auth Error: ${error.message}`);
       throw new UnauthorizedException('Failed to authenticate with Discord');
     }
   }

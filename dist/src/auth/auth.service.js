@@ -41,6 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
@@ -48,18 +49,20 @@ const config_1 = require("@nestjs/config");
 const jwt_1 = require("@nestjs/jwt");
 const users_service_1 = require("../users/users.service");
 const bcrypt = __importStar(require("bcrypt"));
-let AuthService = class AuthService {
+let AuthService = AuthService_1 = class AuthService {
     configService;
     jwtService;
     usersService;
+    logger = new common_1.Logger(AuthService_1.name);
     constructor(configService, jwtService, usersService) {
         this.configService = configService;
         this.jwtService = jwtService;
         this.usersService = usersService;
+        this.logger.log('AuthService initialized');
     }
     async loginWithDiscord(code) {
         try {
-            console.log('Attempting Discord exchange with code:', code);
+            this.logger.log(`Attempting Discord exchange with code: ${code}`);
             const params = new URLSearchParams({
                 client_id: this.configService.get('DISCORD_CLIENT_ID'),
                 client_secret: this.configService.get('DISCORD_CLIENT_SECRET'),
@@ -67,10 +70,10 @@ let AuthService = class AuthService {
                 code,
                 redirect_uri: this.configService.get('DISCORD_REDIRECT_URI'),
             });
-            console.log('--- CREDENTIAL CHECK ---');
-            console.log('Client ID:', this.configService.get('DISCORD_CLIENT_ID'));
-            console.log('Secret exists?', !!this.configService.get('DISCORD_CLIENT_SECRET'));
-            console.log('------------------------');
+            this.logger.log('--- CREDENTIAL CHECK ---');
+            this.logger.log(`Client ID: ${this.configService.get('DISCORD_CLIENT_ID')}`);
+            this.logger.log(`Secret exists? ${!!this.configService.get('DISCORD_CLIENT_SECRET')}`);
+            this.logger.log('------------------------');
             // 1. Exchange code for access token using native fetch
             const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
                 method: 'POST',
@@ -132,7 +135,7 @@ let AuthService = class AuthService {
             };
         }
         catch (error) {
-            console.error('Discord Auth Error:', error.message);
+            this.logger.error(`Discord Auth Error: ${error.message}`);
             throw new common_1.UnauthorizedException('Failed to authenticate with Discord');
         }
     }
@@ -170,7 +173,7 @@ let AuthService = class AuthService {
     }
 };
 exports.AuthService = AuthService;
-exports.AuthService = AuthService = __decorate([
+exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [config_1.ConfigService,
         jwt_1.JwtService,
