@@ -10,14 +10,13 @@ exports.TournamentModule = void 0;
 const common_1 = require("@nestjs/common");
 const tournament_service_1 = require("./tournament.service");
 const tournament_controller_1 = require("./tournament.controller");
-const prisma_service_1 = require("../../prisma/prisma.service");
 let TournamentModule = class TournamentModule {
 };
 exports.TournamentModule = TournamentModule;
 exports.TournamentModule = TournamentModule = __decorate([
     (0, common_1.Module)({
         controllers: [tournament_controller_1.TournamentController],
-        providers: [tournament_service_1.TournamentService, prisma_service_1.PrismaService],
+        providers: [tournament_service_1.TournamentService],
     })
 ], TournamentModule);
 //# sourceMappingURL=tournament.module.js.map

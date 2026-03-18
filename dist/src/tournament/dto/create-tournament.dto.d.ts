@@ -7,6 +7,6 @@ export declare class CreateTournamentDto {
     description?: string;
     maxParticipants: number;
     maxTeamSize: number;
-    organizerId: string;
+    organizerId?: string;
     prizePools?: CreatePrizePoolDto[];
 }

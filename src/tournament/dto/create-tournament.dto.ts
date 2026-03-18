@@ -31,8 +31,8 @@ export class CreateTournamentDto {
   maxTeamSize!: number;
 
   @IsUUID()
-  @IsNotEmpty()
-  organizerId!: string;
+  @IsOptional()
+  organizerId?: string;
 
   // 3. Add the dynamic array of Prize Pools
   @IsArray()

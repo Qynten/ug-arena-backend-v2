@@ -4,31 +4,32 @@ import { UpdateTournamentDto } from './dto/update-tournament.dto';
 export declare class TournamentController {
     private readonly tournamentService;
     constructor(tournamentService: TournamentService);
-    create(createTournamentDto: CreateTournamentDto): Promise<{
+    create(createTournamentDto: CreateTournamentDto, userId: string): Promise<{
         prizePools: {
-            position: import("../generated/prisma/enums").PrizePoolPosition;
+            position: import(".prisma/client").$Enums.PrizePoolPosition;
             amount: number;
             id: string;
             metadata: import("@prisma/client/runtime/client").JsonValue | null;
             createdAt: Date;
             updatedAt: Date;
             currency: string;
-            payoutStatus: import("../generated/prisma/enums").PayoutStatus;
+            payoutStatus: import(".prisma/client").$Enums.PayoutStatus;
             winnerId: string | null;
             tournamentId: string;
         }[];
         organizer: {
             name: string | null;
             id: string;
-            status: import("../generated/prisma/enums").UserStatus;
+            status: import(".prisma/client").$Enums.UserStatus;
             createdAt: Date;
             updatedAt: Date;
             email: string;
-            password: string;
+            password: string | null;
+            refreshTokenHash: string | null;
             photo: string | null;
             contactNO: string | null;
             location: string | null;
-            roles: import("../generated/prisma/enums").UserRole[];
+            roles: import(".prisma/client").$Enums.UserRole[];
             isBlocked: boolean;
         };
     } & {
@@ -38,8 +39,8 @@ export declare class TournamentController {
         maxTeamSize: number;
         organizerId: string;
         id: string;
-        type: import("../generated/prisma/enums").TournamentType;
-        status: import("../generated/prisma/enums").TournamentStatus;
+        type: import(".prisma/client").$Enums.TournamentType;
+        status: import(".prisma/client").$Enums.TournamentStatus;
         regStart: Date | null;
         regEnd: Date | null;
         seedingStart: Date | null;
@@ -59,14 +60,14 @@ export declare class TournamentController {
     }>;
     findAll(): Promise<({
         prizePools: {
-            position: import("../generated/prisma/enums").PrizePoolPosition;
+            position: import(".prisma/client").$Enums.PrizePoolPosition;
             amount: number;
             id: string;
             metadata: import("@prisma/client/runtime/client").JsonValue | null;
             createdAt: Date;
             updatedAt: Date;
             currency: string;
-            payoutStatus: import("../generated/prisma/enums").PayoutStatus;
+            payoutStatus: import(".prisma/client").$Enums.PayoutStatus;
             winnerId: string | null;
             tournamentId: string;
         }[];
@@ -83,8 +84,8 @@ export declare class TournamentController {
         maxTeamSize: number;
         organizerId: string;
         id: string;
-        type: import("../generated/prisma/enums").TournamentType;
-        status: import("../generated/prisma/enums").TournamentStatus;
+        type: import(".prisma/client").$Enums.TournamentType;
+        status: import(".prisma/client").$Enums.TournamentStatus;
         regStart: Date | null;
         regEnd: Date | null;
         seedingStart: Date | null;
@@ -104,14 +105,14 @@ export declare class TournamentController {
     })[]>;
     findOne(id: string): Promise<{
         prizePools: {
-            position: import("../generated/prisma/enums").PrizePoolPosition;
+            position: import(".prisma/client").$Enums.PrizePoolPosition;
             amount: number;
             id: string;
             metadata: import("@prisma/client/runtime/client").JsonValue | null;
             createdAt: Date;
             updatedAt: Date;
             currency: string;
-            payoutStatus: import("../generated/prisma/enums").PayoutStatus;
+            payoutStatus: import(".prisma/client").$Enums.PayoutStatus;
             winnerId: string | null;
             tournamentId: string;
         }[];
@@ -128,8 +129,8 @@ export declare class TournamentController {
         maxTeamSize: number;
         organizerId: string;
         id: string;
-        type: import("../generated/prisma/enums").TournamentType;
-        status: import("../generated/prisma/enums").TournamentStatus;
+        type: import(".prisma/client").$Enums.TournamentType;
+        status: import(".prisma/client").$Enums.TournamentStatus;
         regStart: Date | null;
         regEnd: Date | null;
         seedingStart: Date | null;
@@ -154,8 +155,8 @@ export declare class TournamentController {
         maxTeamSize: number;
         organizerId: string;
         id: string;
-        type: import("../generated/prisma/enums").TournamentType;
-        status: import("../generated/prisma/enums").TournamentStatus;
+        type: import(".prisma/client").$Enums.TournamentType;
+        status: import(".prisma/client").$Enums.TournamentStatus;
         regStart: Date | null;
         regEnd: Date | null;
         seedingStart: Date | null;
@@ -180,8 +181,8 @@ export declare class TournamentController {
         maxTeamSize: number;
         organizerId: string;
         id: string;
-        type: import("../generated/prisma/enums").TournamentType;
-        status: import("../generated/prisma/enums").TournamentStatus;
+        type: import(".prisma/client").$Enums.TournamentType;
+        status: import(".prisma/client").$Enums.TournamentStatus;
         regStart: Date | null;
         regEnd: Date | null;
         seedingStart: Date | null;

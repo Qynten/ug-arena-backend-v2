@@ -11,7 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TournamentService = void 0;
 const common_1 = require("@nestjs/common");
-const prisma_service_1 = require("../../prisma/prisma.service");
+const prisma_service_1 = require("../prisma/prisma.service");
 let TournamentService = class TournamentService {
     prisma;
     // 1. Inject the Prisma Service so we can talk to the database
@@ -19,7 +19,7 @@ let TournamentService = class TournamentService {
         this.prisma = prisma;
     }
     // 2. The logic from your old script.ts for creating a tournament
-    async create(createTournamentDto) {
+    async create(createTournamentDto, organizerId) {
         return this.prisma.tournament.create({
             data: {
                 name: createTournamentDto.name,
@@ -29,7 +29,7 @@ let TournamentService = class TournamentService {
                 maxParticipants: createTournamentDto.maxParticipants,
                 maxTeamSize: createTournamentDto.maxTeamSize,
                 organizer: {
-                    connect: { id: createTournamentDto.organizerId }
+                    connect: { id: organizerId }
                 },
                 // Dynamically map the array of prize pools from the request
                 prizePools: createTournamentDto.prizePools ? {

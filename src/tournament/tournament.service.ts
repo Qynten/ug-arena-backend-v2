@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class TournamentService {
@@ -9,7 +9,7 @@ export class TournamentService {
   constructor(private prisma: PrismaService) {}
 
   // 2. The logic from your old script.ts for creating a tournament
-  async create(createTournamentDto: CreateTournamentDto) {
+  async create(createTournamentDto: CreateTournamentDto, organizerId: string) {
     return this.prisma.tournament.create({
       data: {
         name: createTournamentDto.name,
@@ -20,7 +20,7 @@ export class TournamentService {
         maxTeamSize: createTournamentDto.maxTeamSize,
         
         organizer: {
-          connect: { id: createTournamentDto.organizerId }
+          connect: { id: organizerId }
         },
         
         // Dynamically map the array of prize pools from the request

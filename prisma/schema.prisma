@@ -5,10 +5,8 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider        = "prisma-client"
-  output          = "../src/generated/prisma"
+  provider        = "prisma-client-js"
   previewFeatures = ["relationJoins"]
-  compilerBuild   = "fast"
 }
 
 datasource db {
@@ -142,7 +140,8 @@ model User {
   id                      String                   @id @default(uuid())
   name                    String?
   email                   String                   @unique
-  password                String
+  password                String?
+  refreshTokenHash        String?
   photo                   String?
   contactNO               String?
   location                String?
