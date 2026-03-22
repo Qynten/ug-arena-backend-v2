@@ -76,7 +76,7 @@ export class AuthService {
       if (!user) {
         user = await this.usersService.create({
           email,
-          name: username,
+          discordName: username,
           photo: avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : undefined,
           provider: 'DISCORD',
           providerAccountId: discordId,
@@ -97,7 +97,7 @@ export class AuthService {
         user: {
           id: user.id,
           email: user.email,
-          name: user.name,
+          discordName: user.discordName,
           roles: user.roles,
         },
         ...tokens,
@@ -109,11 +109,22 @@ export class AuthService {
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
+    // 1. Verify the JWT signature and expiry first (Stateless Check)
+    try {
+      await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch (e) {
+      throw new UnauthorizedException('Refresh token expired or invalid');
+    }
+
+    // 2. Database Lookup
     const user = await this.usersService.findById(userId);
     if (!user || !user.refreshTokenHash) {
       throw new UnauthorizedException('Access Denied');
     }
 
+    // 3. Hash Comparison (Stateful Check for Rotation)
     const refreshTokenMatches = await bcrypt.compare(
       refreshToken,
       user.refreshTokenHash,

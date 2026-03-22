@@ -22,7 +22,7 @@ export class UsersService {
 
   async create(data: {
     email: string;
-    name?: string;
+    discordName?: string;
     photo?: string;
     provider: 'DISCORD';
     providerAccountId: string;
@@ -30,7 +30,7 @@ export class UsersService {
     return this.prisma.user.create({
       data: {
         email: data.email,
-        name: data.name,
+        discordName: data.discordName,
         photo: data.photo,
         status: UserStatus.ACTIVE,
         roles: [UserRole.PLAYER],

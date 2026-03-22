@@ -52,7 +52,7 @@ export class TournamentService {
         organizer: {
           select: {
             id: true,
-            name: true,
+            discordName: true,
             email: true,
             photo: true,
             // Notice we completely omitted the password and role fields!
@@ -72,7 +72,7 @@ export class TournamentService {
         organizer: {
           select: {
             id: true,
-            name: true,
+            discordName: true,
             email: true,
             photo: true,
           }
