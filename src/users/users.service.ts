@@ -22,6 +22,7 @@ export class UsersService {
 
   async create(data: {
     email: string;
+    displayName?: string;
     discordName?: string;
     photo?: string;
     provider: 'DISCORD';
@@ -30,6 +31,7 @@ export class UsersService {
     return this.prisma.user.create({
       data: {
         email: data.email,
+        displayName: data.displayName,
         discordName: data.discordName,
         photo: data.photo,
         status: UserStatus.ACTIVE,
@@ -54,6 +56,39 @@ export class UsersService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { refreshTokenHash: hash },
+    });
+  }
+
+  async upsertByEmail(data: {
+    email: string;
+    displayName?: string;
+    discordName?: string;
+    photo?: string;
+    provider: 'DISCORD';
+    providerAccountId: string;
+  }) {
+    return this.prisma.user.upsert({
+      where: { email: data.email },
+      update: {
+        displayName: data.displayName,
+        discordName: data.discordName,
+        photo: data.photo,
+      },
+      create: {
+        email: data.email,
+        displayName: data.displayName,
+        discordName: data.discordName,
+        photo: data.photo,
+        status: UserStatus.ACTIVE,
+        roles: [UserRole.PLAYER],
+        accounts: {
+          create: {
+            provider: data.provider,
+            providerAccountId: data.providerAccountId,
+          },
+        },
+      },
+      include: { accounts: true },
     });
   }
 

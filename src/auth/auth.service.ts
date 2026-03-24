@@ -28,10 +28,6 @@ export class AuthService {
         redirect_uri: this.configService.get<string>('DISCORD_REDIRECT_URI')!,
       });
 
-      this.logger.log('--- CREDENTIAL CHECK ---');
-      this.logger.log(`Client ID: ${this.configService.get<string>('DISCORD_CLIENT_ID')}`);
-      this.logger.log(`Secret exists? ${!!this.configService.get<string>('DISCORD_CLIENT_SECRET')}`);
-      this.logger.log('------------------------');
       // 1. Exchange code for access token using native fetch
       const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
         method: 'POST',
@@ -64,40 +60,42 @@ export class AuthService {
         throw new Error(`Profile Fetch Failed: ${userResponse.status} - ${errorText}`);
       }
 
+      // 3. Extract Discord Scopes
       const userData = await userResponse.json();
-      const { id: discordId, email, username, avatar } = userData;
+      const { id: discordId, email, username, global_name, avatar } = userData;
 
       if (!email) {
         throw new UnauthorizedException('Email not provided by Discord');
       }
 
-      // 3. Find or create user
-      let user = await this.usersService.findByEmail(email);
-      if (!user) {
-        user = await this.usersService.create({
-          email,
-          discordName: username,
-          photo: avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : undefined,
-          provider: 'DISCORD',
-          providerAccountId: discordId,
-        });
-      }
+      // 4. Upsert user to prevent race conditions
+      const user = await this.usersService.upsertByEmail({
+        email,
+        displayName: global_name || username,
+        discordName: username,
+        photo: avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : undefined,
+        provider: 'DISCORD',
+        providerAccountId: discordId,
+      });
 
       if (!user) {
-        throw new UnauthorizedException('User could not be created');
+        throw new UnauthorizedException('User could not be created or updated');
       }
 
-      // 4. Generate tokens
+      // 5. Generate tokens
       const tokens = await this.generateTokens(user.id, user.email, user.roles);
 
-      // 5. Update refresh token hash
+      // 6. Update refresh token hash
       await this.usersService.updateRefreshToken(user.id, tokens.refreshToken);
 
+      // 7. Return the full payload with the new schema variables
       return {
         user: {
           id: user.id,
           email: user.email,
-          discordName: user.discordName,
+          displayName: user.displayName || global_name || username,
+          discordName: user.discordName || username,
+          photo: user.photo || (avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : null),
           roles: user.roles,
         },
         ...tokens,

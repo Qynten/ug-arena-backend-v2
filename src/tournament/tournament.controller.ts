@@ -34,13 +34,17 @@ export class TournamentController {
 
   @Patch(':id')
   @Roles(UserRole.ORGANIZER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  update(@Param('id') id: string, @Body() updateTournamentDto: UpdateTournamentDto) {
-    return this.tournamentService.update(id, updateTournamentDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateTournamentDto: UpdateTournamentDto,
+    @GetUser() user: any,
+  ) {
+    return this.tournamentService.update(id, updateTournamentDto, user);
   }
 
   @Delete(':id')
   @Roles(UserRole.ORGANIZER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  remove(@Param('id') id: string) {
-    return this.tournamentService.remove(id);
+  remove(@Param('id') id: string, @GetUser() user: any) {
+    return this.tournamentService.remove(id, user);
   }
 }
