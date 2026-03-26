@@ -32,6 +32,8 @@ model User {
   teamPlayer              TeamPlayer[]             @relation("PlayerTeam")
   tournamentRosters       TournamentRoster[]       @relation("UserRosters")
   tournaments             Tournament[]             @relation("TournamentOrganizer")
+  ownedTournaments        Tournament[]             @relation("TournamentOwner")
+  staffAssignments        TournamentStaff[]
   accounts                UserAccount[]
 
   @@index([status])
@@ -93,6 +95,7 @@ model Tournament {
   metadata        Json?                @default("{}")
   isDeleted       Boolean              @default(false)
   organizerId     String
+  ownerId         String
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   auditLogs       AuditLog[]
@@ -104,11 +107,37 @@ model Tournament {
   scores          score[]              @relation("TournamentScores")
   teams           Team[]               @relation("TournamentTeams")
   activities      TournamentActivity[]
+  staff           TournamentStaff[]
   organizer       User                 @relation("TournamentOrganizer", fields: [organizerId], references: [id])
+  owner           User                 @relation("TournamentOwner", fields: [ownerId], references: [id])
 
   @@index([organizerId])
+  @@index([ownerId])
   @@index([status])
   @@map("tournaments")
+}
+
+model TournamentStaff {
+  id           String             @id @default(uuid())
+  userId       String
+  tournamentId String
+  role         TournamentRoleType
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tournament   Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tournamentId, role])
+  @@index([userId])
+  @@index([tournamentId])
+  @@map("tournament_staff")
+}
+
+enum TournamentRoleType {
+  DRAFT_ADMIN
+  SEED_ADMIN
+  SCORE_REPORTER
+  MODERATOR
 }
 
 model Participant {

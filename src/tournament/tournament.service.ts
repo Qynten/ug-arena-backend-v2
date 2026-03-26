@@ -12,7 +12,7 @@ export class TournamentService {
   private async checkOwnership(tournamentId: string, user: any) {
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
-      select: { organizerId: true },
+      select: { ownerId: true, organizerId: true },
     });
 
     if (!tournament) {
@@ -22,7 +22,10 @@ export class TournamentService {
     const isAdmin = user.roles.includes(UserRole.ADMIN) || user.roles.includes(UserRole.SUPER_ADMIN);
     const isOrganizer = user.roles.includes(UserRole.ORGANIZER);
 
-    if (isOrganizer && !isAdmin && tournament.organizerId !== user.id) {
+    // Prioritize ownerId for the new hierarchy, but fall back to organizerId if ownerId isn't set (for legacy data)
+    const effectiveOwnerId = tournament.ownerId || tournament.organizerId;
+
+    if (isOrganizer && !isAdmin && effectiveOwnerId !== user.id) {
       throw new ForbiddenException('You do not have permission to modify this tournament.');
     }
 
@@ -30,7 +33,7 @@ export class TournamentService {
   }
 
   // 2. The logic from your old script.ts for creating a tournament
-  async create(createTournamentDto: CreateTournamentDto, organizerId: string) {
+  async create(createTournamentDto: CreateTournamentDto, ownerId: string) {
     return this.prisma.tournament.create({
       data: {
         name: createTournamentDto.name,
@@ -47,7 +50,10 @@ export class TournamentService {
         maxTeamSize: createTournamentDto.maxTeamSize,
         
         organizer: {
-          connect: { id: organizerId }
+          connect: { id: ownerId }
+        },
+        owner: {
+          connect: { id: ownerId }
         },
         
         // Dynamically map the array of prize pools from the request
@@ -60,8 +66,28 @@ export class TournamentService {
       },
       include: {
         organizer: true,
+        owner: true,
         prizePools: true,
       },
+    });
+  }
+
+  async assignStaff(tournamentId: string, userId: string, role: any) {
+    return this.prisma.tournamentStaff.create({
+      data: {
+        tournamentId,
+        userId,
+        role,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            discordName: true,
+            email: true,
+          }
+        }
+      }
     });
   }
 

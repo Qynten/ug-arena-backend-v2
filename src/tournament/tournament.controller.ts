@@ -2,8 +2,10 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@n
 import { TournamentService } from './tournament.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
+import { AssignStaffDto } from './dto/assign-staff.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { TournamentRoleGuard } from '../common/guards/tournament-role.guard';
 import { UserRole } from '@prisma/client';
 import { GetUser } from '../common/decorators/get-user.decorator';
 
@@ -19,6 +21,15 @@ export class TournamentController {
     @GetUser('id') userId: string,
   ) {
     return this.tournamentService.create(createTournamentDto, userId);
+  }
+
+  @Post(':id/staff')
+  @UseGuards(TournamentRoleGuard)
+  assignStaff(
+    @Param('id') id: string,
+    @Body() assignStaffDto: AssignStaffDto,
+  ) {
+    return this.tournamentService.assignStaff(id, assignStaffDto.userId, assignStaffDto.role);
   }
 
   @Get()
