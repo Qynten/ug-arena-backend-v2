@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { TournamentRoleType } from '@prisma/client';
+import { TournamentRoleType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TOURNAMENT_ROLES_KEY } from '../decorators/tournament-roles.decorator';
 
@@ -23,35 +23,43 @@ export class TournamentRoleGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    // If no roles are required, it might still require just Ownership check for some routes,
-    // but the task specifically mentions roles from the decorator.
-    // If we want this guard to be generic for Tournament access, we might need a way to say "any role" or "just owner".
-    // For now, if no roles are defined on the decorator, we might assume it only requires Ownership or the user doesn't care.
-    // But usually, if the guard is applied, we expect some check.
-    
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    
+
     if (!user) {
       return false;
     }
 
-    const tournamentId = request.params.id || request.body.tournamentId;
+    // Account for system-level ADMIN or SUPER_ADMIN roles
+    const isSystemAdmin =
+      user.roles?.includes(UserRole.ADMIN) ||
+      user.roles?.includes(UserRole.SUPER_ADMIN);
+
+    if (isSystemAdmin) {
+      return true;
+    }
+
+    const tournamentId = 
+      request.params.id || 
+      request.params.tournamentId || 
+      request.body.tournamentId ||
+      request.query.tournamentId;
+
     if (!tournamentId) {
-      return true; // Or throw an error? Usually guards shouldn't be here if no ID is present.
+      return false;
     }
 
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
-      select: { ownerId: true },
+      select: { ownerId: true, organizerId: true },
     });
 
     if (!tournament) {
       throw new NotFoundException('Tournament not found');
     }
 
-    // Owner has God-mode
-    if (tournament.ownerId === user.id) {
+    // Owner has God-mode (including legacy organizerId)
+    if (tournament.ownerId === user.id || tournament.organizerId === user.id) {
       return true;
     }
 

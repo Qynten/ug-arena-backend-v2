@@ -4,9 +4,9 @@ import { TournamentRoleType } from '@prisma/client';
 export class AssignStaffDto {
   @IsUUID()
   @IsNotEmpty()
-  userId: string;
+  userId!: string;
 
   @IsEnum(TournamentRoleType)
   @IsNotEmpty()
-  role: TournamentRoleType;
+  role!: TournamentRoleType;
 }
