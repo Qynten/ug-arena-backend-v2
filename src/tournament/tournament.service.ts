@@ -91,6 +91,70 @@ export class TournamentService {
     });
   }
 
+  async findStaff(tournamentId: string) {
+    return this.prisma.tournamentStaff.findMany({
+      where: { tournamentId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            discordName: true,
+            email: true,
+            photo: true,
+          },
+        },
+      },
+    });
+  }
+
+  async removeStaff(tournamentId: string, userId: string) {
+    // Revoke all roles for this user in this tournament
+    return this.prisma.tournamentStaff.deleteMany({
+      where: {
+        tournamentId,
+        userId,
+      },
+    });
+  }
+
+  async findMyTournaments(userId: string) {
+    return this.prisma.tournament.findMany({
+      where: {
+        isDeleted: false,
+        OR: [
+          { ownerId: userId },
+          { staff: { some: { userId } } },
+        ],
+      },
+      include: {
+        prizePools: true,
+        organizer: {
+          select: {
+            id: true,
+            discordName: true,
+            email: true,
+            photo: true,
+          },
+        },
+        staff: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                discordName: true,
+                email: true,
+                photo: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
   // 3. The logic from your old script.ts for fetching tournaments
   async findAll() {
     return this.prisma.tournament.findMany({
@@ -118,23 +182,33 @@ export class TournamentService {
 
   // (NestJS generated these placeholders for you to fill out later)
   async findOne(id: string) {
-    const tournament = await this.prisma.tournament.findUnique({
-      where: { id, isDeleted: false }, // Search by the UUID and ensure not deleted
+    const tournament = await this.prisma.tournament.findFirst({
+      where: { id, isDeleted: false },
       include: {
         prizePools: true,
-        // Keep the exact same security firewall we built for findAll
         organizer: {
           select: {
             id: true,
             discordName: true,
             email: true,
             photo: true,
-          }
+          },
+        },
+        staff: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                discordName: true,
+                email: true,
+                photo: true,
+              },
+            },
+          },
         },
       },
     });
 
-    // If the database returns nothing, throw a clean 404 error
     if (!tournament) {
       throw new NotFoundException(`Tournament with ID ${id} not found.`);
     }

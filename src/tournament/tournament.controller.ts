@@ -10,12 +10,12 @@ import { UserRole } from '@prisma/client';
 import { GetUser } from '../common/decorators/get-user.decorator';
 
 @Controller('tournaments')
-@UseGuards(JwtAuthGuard)
 export class TournamentController {
   constructor(private readonly tournamentService: TournamentService) {}
 
   @Post()
-  @Roles(UserRole.ORGANIZER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
+  // REMOVED the @Roles decorator here so any logged-in user can create!
   create(
     @Body() createTournamentDto: CreateTournamentDto,
     @GetUser('id') userId: string,
@@ -24,7 +24,7 @@ export class TournamentController {
   }
 
   @Post(':id/staff')
-  @UseGuards(TournamentRoleGuard)
+  @UseGuards(JwtAuthGuard, TournamentRoleGuard)
   assignStaff(
     @Param('id') id: string,
     @Body() assignStaffDto: AssignStaffDto,
@@ -32,9 +32,30 @@ export class TournamentController {
     return this.tournamentService.assignStaff(id, assignStaffDto.userId, assignStaffDto.role);
   }
 
+  @Get(':id/staff')
+  @UseGuards(JwtAuthGuard)
+  findStaff(@Param('id') id: string) {
+    return this.tournamentService.findStaff(id);
+  }
+
+  @Delete(':id/staff/:userId')
+  @UseGuards(JwtAuthGuard, TournamentRoleGuard)
+  removeStaff(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.tournamentService.removeStaff(id, userId);
+  }
+
   @Get()
   findAll() {
     return this.tournamentService.findAll();
+  }
+
+  @Get('my-tournaments')
+  @UseGuards(JwtAuthGuard)
+  findMyTournaments(@GetUser('id') userId: string) {
+    return this.tournamentService.findMyTournaments(userId);
   }
 
   @Get(':id')
@@ -44,6 +65,7 @@ export class TournamentController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   @Roles(UserRole.ORGANIZER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   update(
     @Param('id') id: string,
@@ -54,6 +76,7 @@ export class TournamentController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
   @Roles(UserRole.ORGANIZER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   remove(@Param('id') id: string, @GetUser() user: any) {
     return this.tournamentService.remove(id, user);
