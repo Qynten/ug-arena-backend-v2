@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { UserRole, TournamentRoleType, MatchStatus } from '@prisma/client';
 
 @Injectable()
 export class TournamentService {
@@ -72,27 +72,63 @@ export class TournamentService {
     });
   }
 
-  async assignStaff(tournamentId: string, userId: string, role: any) {
-    return this.prisma.tournamentStaff.create({
-      data: {
-        tournamentId,
-        userId,
-        role,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            discordName: true,
-            email: true,
-          }
-        }
-      }
+  async assignStaff(tournamentId: string, ownerId: string, payload: { userId: string; role: TournamentRoleType }) {
+    const tournament = await this.prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { ownerId: true, organizerId: true },
     });
+
+    if (!tournament) {
+      throw new NotFoundException(`Tournament with ID ${tournamentId} not found.`);
+    }
+
+    // Strict ownership check as per instructions
+    if (tournament.ownerId !== ownerId) {
+      throw new ForbiddenException('Only the tournament owner can assign staff.');
+    }
+
+    const { userId, role } = payload;
+
+    try {
+      return await this.prisma.tournamentStaff.upsert({
+        where: {
+          userId_tournamentId_role: {
+            userId,
+            tournamentId,
+            role,
+          },
+        },
+        update: {
+          role,
+        },
+        create: {
+          userId,
+          tournamentId,
+          role,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              discordName: true,
+              email: true,
+              photo: true,
+            },
+          },
+        },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2003') {
+        throw new BadRequestException(
+          'User not found. Make sure they have logged into the website at least once!',
+        );
+      }
+      throw error;
+    }
   }
 
-  async findStaff(tournamentId: string) {
-    return this.prisma.tournamentStaff.findMany({
+  async getTournamentStaff(tournamentId: string) {
+    const staff = await this.prisma.tournamentStaff.findMany({
       where: { tournamentId },
       include: {
         user: {
@@ -105,14 +141,27 @@ export class TournamentService {
         },
       },
     });
+    return staff;
   }
 
-  async removeStaff(tournamentId: string, userId: string) {
-    // Revoke all roles for this user in this tournament
+  async removeStaff(tournamentId: string, ownerId: string, targetUserId: string) {
+    const tournament = await this.prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { ownerId: true },
+    });
+
+    if (!tournament) {
+      throw new NotFoundException(`Tournament with ID ${tournamentId} not found.`);
+    }
+
+    if (tournament.ownerId !== ownerId) {
+      throw new ForbiddenException('Only the tournament owner can remove staff.');
+    }
+
     return this.prisma.tournamentStaff.deleteMany({
       where: {
         tournamentId,
-        userId,
+        userId: targetUserId,
       },
     });
   }
@@ -285,5 +334,95 @@ export class TournamentService {
     } catch (error) {
       throw new NotFoundException(`Cannot delete. Tournament with ID ${id} not found.`);
     }
+  }
+
+  async getBracket(tournamentId: string) {
+    return this.prisma.match.findMany({
+      where: { tournamentId },
+      include: {
+        participant1: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                discordName: true,
+                photo: true,
+              },
+            },
+            team: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        participant2: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                discordName: true,
+                photo: true,
+              },
+            },
+            team: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        round: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+  }
+
+  async updateMatchScore(
+    tournamentId: string,
+    matchId: string,
+    userId: string,
+    payload: { team1Score: number; team2Score: number },
+  ) {
+    const tournament = await this.prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { ownerId: true },
+    });
+
+    if (!tournament) {
+      throw new NotFoundException(`Tournament with ID ${tournamentId} not found.`);
+    }
+
+    // Check staff roles for scoring permission
+    const staffMember = await this.prisma.tournamentStaff.findFirst({
+      where: {
+        tournamentId,
+        userId,
+        role: {
+          in: [TournamentRoleType.SCORE_REPORTER, TournamentRoleType.DRAFT_ADMIN],
+        },
+      },
+    });
+
+    // Check if user is owner or authorized staff
+    if (tournament.ownerId !== userId && !staffMember) {
+      throw new ForbiddenException(
+        'You do not have permission to report scores for this tournament.',
+      );
+    }
+
+    // Update match scores and status
+    return this.prisma.match.update({
+      where: { id: matchId },
+      data: {
+        p1Score: payload.team1Score,
+        p2Score: payload.team2Score,
+        status: MatchStatus.COMPLETED,
+      },
+    });
   }
 }

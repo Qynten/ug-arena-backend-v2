@@ -23,28 +23,45 @@ export class TournamentController {
     return this.tournamentService.create(createTournamentDto, userId);
   }
 
+  @Get(':id/staff')
+  getTournamentStaff(@Param('id') id: string) {
+    return this.tournamentService.getTournamentStaff(id);
+  }
+
+  @Get(':id/bracket')
+  getBracket(@Param('id') id: string) {
+    return this.tournamentService.getBracket(id);
+  }
+
+  @Patch(':id/matches/:matchId')
+  @UseGuards(JwtAuthGuard)
+  updateMatchScore(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @GetUser('id') userId: string,
+    @Body() payload: { team1Score: number; team2Score: number },
+  ) {
+    return this.tournamentService.updateMatchScore(id, matchId, userId, payload);
+  }
+
   @Post(':id/staff')
-  @UseGuards(JwtAuthGuard, TournamentRoleGuard)
+  @UseGuards(JwtAuthGuard)
   assignStaff(
     @Param('id') id: string,
     @Body() assignStaffDto: AssignStaffDto,
+    @GetUser('id') userId: string,
   ) {
-    return this.tournamentService.assignStaff(id, assignStaffDto.userId, assignStaffDto.role);
-  }
-
-  @Get(':id/staff')
-  @UseGuards(JwtAuthGuard)
-  findStaff(@Param('id') id: string) {
-    return this.tournamentService.findStaff(id);
+    return this.tournamentService.assignStaff(id, userId, assignStaffDto);
   }
 
   @Delete(':id/staff/:userId')
-  @UseGuards(JwtAuthGuard, TournamentRoleGuard)
+  @UseGuards(JwtAuthGuard)
   removeStaff(
     @Param('id') id: string,
-    @Param('userId') userId: string,
+    @Param('userId') targetUserId: string,
+    @GetUser('id') userId: string,
   ) {
-    return this.tournamentService.removeStaff(id, userId);
+    return this.tournamentService.removeStaff(id, userId, targetUserId);
   }
 
   @Get()
