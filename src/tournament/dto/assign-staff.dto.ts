@@ -1,10 +1,10 @@
-import { IsUUID, IsEnum, IsNotEmpty } from 'class-validator';
+import { IsString, IsEnum, IsNotEmpty } from 'class-validator';
 import { TournamentRoleType } from '@prisma/client';
 
 export class AssignStaffDto {
-  @IsUUID()
+  @IsString()
   @IsNotEmpty()
-  userId!: string;
+  discordHandle!: string;
 
   @IsEnum(TournamentRoleType)
   @IsNotEmpty()

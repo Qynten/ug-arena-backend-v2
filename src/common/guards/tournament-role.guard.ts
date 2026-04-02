@@ -51,15 +51,15 @@ export class TournamentRoleGuard implements CanActivate {
 
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
-      select: { ownerId: true, organizerId: true },
+      select: { ownerId: true },
     });
 
     if (!tournament) {
       throw new NotFoundException('Tournament not found');
     }
 
-    // Owner has God-mode (including legacy organizerId)
-    if (tournament.ownerId === user.id || tournament.organizerId === user.id) {
+    // Owner has God-mode
+    if (tournament.ownerId === user.id) {
       return true;
     }
 

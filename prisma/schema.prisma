@@ -31,7 +31,6 @@ model User {
   teamPlayerRegistrations TeamPlayerRegistration[] @relation("PlayerTeamPlayerRegistrations")
   teamPlayer              TeamPlayer[]             @relation("PlayerTeam")
   tournamentRosters       TournamentRoster[]       @relation("UserRosters")
-  tournaments             Tournament[]             @relation("TournamentOrganizer")
   ownedTournaments        Tournament[]             @relation("TournamentOwner")
   staffAssignments        TournamentStaff[]
   accounts                UserAccount[]
@@ -76,6 +75,10 @@ model Tournament {
   id              String               @id @default(uuid())
   name            String
   description     String
+  game            String               @default("Chess")
+  region          String               @default("Global")
+  startTime       DateTime             @default(now())
+  imageUrl        String?
   type            TournamentType       @default(TEAM)
   status          TournamentStatus     @default(DRAFT)
   regStart        DateTime?
@@ -94,7 +97,6 @@ model Tournament {
   logo            String?
   metadata        Json?                @default("{}")
   isDeleted       Boolean              @default(false)
-  organizerId     String
   ownerId         String
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
@@ -108,12 +110,14 @@ model Tournament {
   teams           Team[]               @relation("TournamentTeams")
   activities      TournamentActivity[]
   staff           TournamentStaff[]
-  organizer       User                 @relation("TournamentOrganizer", fields: [organizerId], references: [id])
   owner           User                 @relation("TournamentOwner", fields: [ownerId], references: [id])
 
-  @@index([organizerId])
   @@index([ownerId])
   @@index([status])
+  @@index([name])
+  @@index([game])
+  @@index([region])
+  @@index([game, region])
   @@map("tournaments")
 }
 
@@ -138,6 +142,9 @@ enum TournamentRoleType {
   SEED_ADMIN
   SCORE_REPORTER
   MODERATOR
+  TOURNAMENT_CREATOR
+  DISPUTE_MANAGER
+  TOURNAMENT_OVERSEER
 }
 
 model Participant {

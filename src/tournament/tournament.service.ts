@@ -12,20 +12,17 @@ export class TournamentService {
   private async checkOwnership(tournamentId: string, user: any) {
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
-      select: { ownerId: true, organizerId: true },
+      select: { ownerId: true },
     });
 
     if (!tournament) {
       throw new NotFoundException(`Tournament with ID ${tournamentId} not found.`);
     }
 
-    const isAdmin = user.roles.includes(UserRole.ADMIN) || user.roles.includes(UserRole.SUPER_ADMIN);
-    const isOrganizer = user.roles.includes(UserRole.ORGANIZER);
+    const isAdmin = user.roles?.includes(UserRole.ADMIN) || user.roles?.includes(UserRole.SUPER_ADMIN);
+    const isOwner = tournament.ownerId === user.id;
 
-    // Prioritize ownerId for the new hierarchy, but fall back to organizerId if ownerId isn't set (for legacy data)
-    const effectiveOwnerId = tournament.ownerId || tournament.organizerId;
-
-    if (isOrganizer && !isAdmin && effectiveOwnerId !== user.id) {
+    if (!isAdmin && !isOwner) {
       throw new ForbiddenException('You do not have permission to modify this tournament.');
     }
 
@@ -38,6 +35,10 @@ export class TournamentService {
       data: {
         name: createTournamentDto.name,
         description: createTournamentDto.description ?? '',
+        game: createTournamentDto.game,
+        region: createTournamentDto.region,
+        startTime: createTournamentDto.startTime ? new Date(createTournamentDto.startTime) : undefined,
+        imageUrl: createTournamentDto.imageUrl,
         regStart: createTournamentDto.regStart,
         regEnd: createTournamentDto.regEnd,
         seedingStart: createTournamentDto.seedingStart,
@@ -49,9 +50,6 @@ export class TournamentService {
         maxParticipants: createTournamentDto.maxParticipants,
         maxTeamSize: createTournamentDto.maxTeamSize,
         
-        organizer: {
-          connect: { id: ownerId }
-        },
         owner: {
           connect: { id: ownerId }
         },
@@ -65,17 +63,16 @@ export class TournamentService {
         } : undefined,
       },
       include: {
-        organizer: true,
         owner: true,
         prizePools: true,
       },
     });
   }
 
-  async assignStaff(tournamentId: string, ownerId: string, payload: { userId: string; role: TournamentRoleType }) {
+  async assignStaff(tournamentId: string, ownerId: string, payload: { discordHandle: string; role: TournamentRoleType }) {
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
-      select: { ownerId: true, organizerId: true },
+      select: { ownerId: true },
     });
 
     if (!tournament) {
@@ -87,13 +84,21 @@ export class TournamentService {
       throw new ForbiddenException('Only the tournament owner can assign staff.');
     }
 
-    const { userId, role } = payload;
+    const { discordHandle, role } = payload;
+    
+    const user = await this.prisma.user.findFirst({
+      where: { discordName: discordHandle },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found. Make sure they have logged into the website at least once!');
+    }
 
     try {
       return await this.prisma.tournamentStaff.upsert({
         where: {
           userId_tournamentId_role: {
-            userId,
+            userId: user.id,
             tournamentId,
             role,
           },
@@ -102,7 +107,7 @@ export class TournamentService {
           role,
         },
         create: {
-          userId,
+          userId: user.id,
           tournamentId,
           role,
         },
@@ -118,11 +123,6 @@ export class TournamentService {
         },
       });
     } catch (error: any) {
-      if (error.code === 'P2003') {
-        throw new BadRequestException(
-          'User not found. Make sure they have logged into the website at least once!',
-        );
-      }
       throw error;
     }
   }
@@ -177,14 +177,6 @@ export class TournamentService {
       },
       include: {
         prizePools: true,
-        organizer: {
-          select: {
-            id: true,
-            discordName: true,
-            email: true,
-            photo: true,
-          },
-        },
         staff: {
           include: {
             user: {
@@ -215,16 +207,6 @@ export class TournamentService {
       include: {
         // Fetch the prize pools
         prizePools: true,
-        // Fetch the organizer, but ONLY select safe public fields
-        organizer: {
-          select: {
-            id: true,
-            discordName: true,
-            email: true,
-            photo: true,
-            // Notice we completely omitted the password and role fields!
-          }
-        },
       },
     });
   }
@@ -235,14 +217,6 @@ export class TournamentService {
       where: { id, isDeleted: false },
       include: {
         prizePools: true,
-        organizer: {
-          select: {
-            id: true,
-            discordName: true,
-            email: true,
-            photo: true,
-          },
-        },
         staff: {
           include: {
             user: {
@@ -268,7 +242,7 @@ export class TournamentService {
   async update(id: string, updateTournamentDto: UpdateTournamentDto, user: any) {
     await this.checkOwnership(id, user);
 
-    const { organizerId, prizePools, ...rest } = updateTournamentDto;
+    const { prizePools, ...rest } = updateTournamentDto;
 
     // Build the prize pool update logic
     const prizePoolUpdate = prizePools ? {
@@ -298,23 +272,12 @@ export class TournamentService {
         where: { id },
         data: {
           ...rest,
-          ...(organizerId && {
-            organizer: { connect: { id: organizerId } },
-          }),
           ...(prizePoolUpdate && {
             prizePools: prizePoolUpdate,
           }),
         },
         include: {
           prizePools: true,
-          organizer: {
-            select: {
-              id: true,
-              discordName: true,
-              email: true,
-              photo: true,
-            }
-          }
         }
       });
     } catch (error) {

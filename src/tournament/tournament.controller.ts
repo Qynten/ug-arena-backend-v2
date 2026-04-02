@@ -1,4 +1,7 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { TournamentService } from './tournament.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
@@ -15,11 +18,25 @@ export class TournamentController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('image', {
+    storage: diskStorage({
+      destination: './uploads',
+      filename: (req, file, callback) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = extname(file.originalname);
+        callback(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+      },
+    }),
+  }))
   // REMOVED the @Roles decorator here so any logged-in user can create!
   create(
     @Body() createTournamentDto: CreateTournamentDto,
     @GetUser('id') userId: string,
+    @UploadedFile() file?: any,
   ) {
+    if (file) {
+      createTournamentDto.imageUrl = `/uploads/${file.filename}`;
+    }
     return this.tournamentService.create(createTournamentDto, userId);
   }
 

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsUUID, IsArray, ValidateNested, IsDate } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsUUID, IsArray, ValidateNested, IsDate, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // 1. Define what a single Prize Pool must look like
@@ -11,6 +11,7 @@ export class CreatePrizePoolDto {
   @IsNotEmpty()
   position!: string;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   amount!: number;
@@ -23,13 +24,31 @@ export class CreateTournamentDto {
   name!: string;
 
   @IsString()
+  @IsNotEmpty()
+  game!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  region!: string;
+
+  @IsDateString()
+  @IsOptional()
+  startTime?: string | Date;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  @IsString()
   @IsOptional()
   description?: string;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(2)
   maxParticipants!: number;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   maxTeamSize!: number;
