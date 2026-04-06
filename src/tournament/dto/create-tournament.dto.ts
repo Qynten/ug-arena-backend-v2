@@ -39,10 +39,6 @@ export class CreateTournamentDto {
   @IsOptional()
   imageUrl?: string;
 
-  @IsString()
-  @IsOptional()
-  description?: string;
-
   @Type(() => Number)
   @IsNumber()
   @Min(2)

@@ -26,7 +26,7 @@ model User {
   disputeMessages         DisputeMessage[]
   disputesReported        MatchDispute[]           @relation("ReportedBy")
   disputesResolved        MatchDispute[]           @relation("ResolvedBy")
-  organizerRequests       OrganizerRequest[]
+
   participants            Participant[]            @relation("UserParticipants")
   teamPlayerRegistrations TeamPlayerRegistration[] @relation("PlayerTeamPlayerRegistrations")
   teamPlayer              TeamPlayer[]             @relation("PlayerTeam")
@@ -58,23 +58,13 @@ model UserAccount {
   @@map("user_accounts")
 }
 
-model OrganizerRequest {
-  id        String                 @id @default(uuid())
-  userId    String
-  status    OrganizerRequestStatus @default(PENDING)
-  createdAt DateTime               @default(now())
-  updatedAt DateTime               @updatedAt
-  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([status])
-  @@map("organizer_requests")
-}
 
 model Tournament {
   id              String               @id @default(uuid())
+  slug            String               @unique @default(uuid())
   name            String
-  description     String
+  description     String?
   game            String               @default("Chess")
   region          String               @default("Global")
   startTime       DateTime             @default(now())
@@ -96,6 +86,8 @@ model Tournament {
   allowDraws      Boolean              @default(false)
   logo            String?
   metadata        Json?                @default("{}")
+  rules           String?
+  requirements    String?
   isDeleted       Boolean              @default(false)
   ownerId         String
   createdAt       DateTime             @default(now())
@@ -547,9 +539,4 @@ enum PrizePoolPosition {
   FIFTH
 }
 
-enum OrganizerRequestStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-  REVOKED
-}
+

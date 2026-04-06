@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
+import { RegisterTeamDto } from './dto/register-team.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole, TournamentRoleType, MatchStatus } from '@prisma/client';
+import { UserRole, TournamentRoleType, MatchStatus, TournamentStatus, TeamPlayerRole } from '@prisma/client';
 
 @Injectable()
 export class TournamentService {
@@ -29,12 +30,45 @@ export class TournamentService {
     return tournament;
   }
 
+  private async generateUniqueSlug(name: string): Promise<string> {
+    let baseSlug = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    if (!baseSlug) {
+      baseSlug = 'tournament';
+    }
+
+    let slug = baseSlug;
+    let isUnique = false;
+
+    while (!isUnique) {
+      const existing = await this.prisma.tournament.findUnique({
+        where: { slug },
+        select: { id: true }
+      });
+      if (!existing) {
+        isUnique = true;
+      } else {
+        const randomString = Math.random().toString(36).substring(2, 6);
+        slug = `${baseSlug}-${randomString}`;
+      }
+    }
+
+    return slug;
+  }
+
   // 2. The logic from your old script.ts for creating a tournament
   async create(createTournamentDto: CreateTournamentDto, ownerId: string) {
+    const slug = await this.generateUniqueSlug(createTournamentDto.name);
+
     return this.prisma.tournament.create({
       data: {
+        slug,
         name: createTournamentDto.name,
-        description: createTournamentDto.description ?? '',
         game: createTournamentDto.game,
         region: createTournamentDto.region,
         startTime: createTournamentDto.startTime ? new Date(createTournamentDto.startTime) : undefined,
@@ -212,9 +246,15 @@ export class TournamentService {
   }
 
   // (NestJS generated these placeholders for you to fill out later)
-  async findOne(id: string) {
+  async findOne(idOrSlug: string) {
     const tournament = await this.prisma.tournament.findFirst({
-      where: { id, isDeleted: false },
+      where: { 
+        isDeleted: false,
+        OR: [
+          { id: idOrSlug },
+          { slug: idOrSlug }
+        ]
+      },
       include: {
         prizePools: true,
         staff: {
@@ -233,7 +273,7 @@ export class TournamentService {
     });
 
     if (!tournament) {
-      throw new NotFoundException(`Tournament with ID ${id} not found.`);
+      throw new NotFoundException(`Tournament with ID or slug ${idOrSlug} not found.`);
     }
 
     return tournament;
@@ -385,6 +425,104 @@ export class TournamentService {
         p1Score: payload.team1Score,
         p2Score: payload.team2Score,
         status: MatchStatus.COMPLETED,
+      },
+    });
+  }
+
+  async registerTeam(idOrSlug: string, userId: string, dto: RegisterTeamDto) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+    });
+
+    if (!tournament) {
+      throw new NotFoundException(`Tournament not found.`);
+    }
+
+    if (tournament.status !== TournamentStatus.REGISTRATION) {
+      throw new BadRequestException('Registration is closed');
+    }
+
+    const existingParticipant = await this.prisma.participant.findFirst({
+      where: {
+        tournamentId: tournament.id,
+        userId: userId,
+      },
+    });
+
+    if (existingParticipant) {
+      throw new BadRequestException('You are already registered for this tournament.');
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      const team = await prisma.team.create({
+        data: {
+          name: dto.name,
+          tournamentId: tournament.id,
+          players: {
+            create: {
+              playerId: userId,
+              role: TeamPlayerRole.CAPTAIN,
+            },
+          },
+        },
+      });
+
+      const participant = await prisma.participant.create({
+        data: {
+          tournamentId: tournament.id,
+          userId: userId,
+          teamId: team.id,
+          rosters: {
+            create: {
+              userId: userId,
+              role: TeamPlayerRole.CAPTAIN,
+            },
+          },
+        },
+        include: {
+          team: {
+            include: {
+              players: true,
+            },
+          },
+        },
+      });
+
+      return participant;
+    });
+  }
+
+  async getTournamentTeams(idOrSlug: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+    });
+
+    if (!tournament) {
+      throw new NotFoundException(`Tournament not found.`);
+    }
+
+    return this.prisma.team.findMany({
+      where: { tournamentId: tournament.id, isDeleted: false },
+      include: {
+        players: {
+          where: { role: TeamPlayerRole.CAPTAIN },
+          include: {
+            player: {
+              select: {
+                id: true,
+                discordName: true,
+                displayName: true,
+                photo: true,
+              },
+            },
+          },
+        },
       },
     });
   }

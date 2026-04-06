@@ -6,6 +6,7 @@ import { TournamentService } from './tournament.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
+import { RegisterTeamDto } from './dto/register-team.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { TournamentRoleGuard } from '../common/guards/tournament-role.guard';
@@ -48,6 +49,21 @@ export class TournamentController {
   @Get(':id/bracket')
   getBracket(@Param('id') id: string) {
     return this.tournamentService.getBracket(id);
+  }
+
+  @Post(':id/register')
+  @UseGuards(JwtAuthGuard)
+  registerTeam(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+    @Body() registerTeamDto: RegisterTeamDto,
+  ) {
+    return this.tournamentService.registerTeam(id, userId, registerTeamDto);
+  }
+
+  @Get(':id/teams')
+  getTournamentTeams(@Param('id') id: string) {
+    return this.tournamentService.getTournamentTeams(id);
   }
 
   @Patch(':id/matches/:matchId')
@@ -100,7 +116,6 @@ export class TournamentController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  @Roles(UserRole.ORGANIZER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   update(
     @Param('id') id: string,
     @Body() updateTournamentDto: UpdateTournamentDto,
@@ -111,7 +126,6 @@ export class TournamentController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  @Roles(UserRole.ORGANIZER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   remove(@Param('id') id: string, @GetUser() user: any) {
     return this.tournamentService.remove(id, user);
   }
