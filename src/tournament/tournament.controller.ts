@@ -7,10 +7,12 @@ import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { RegisterTeamDto } from './dto/register-team.dto';
+import { CreatePartyDto } from './dto/create-party.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { TournamentRoleGuard } from '../common/guards/tournament-role.guard';
-import { UserRole } from '@prisma/client';
+import { TournamentRoles } from '../common/decorators/tournament-roles.decorator';
+import { UserRole, TournamentRoleType } from '@prisma/client';
 import { GetUser } from '../common/decorators/get-user.decorator';
 
 @Controller('tournaments')
@@ -51,6 +53,12 @@ export class TournamentController {
     return this.tournamentService.getBracket(id);
   }
 
+  @Post(':id/generate-bracket')
+  @UseGuards(JwtAuthGuard)
+  generateBracket(@Param('id') id: string, @GetUser('id') userId: string) {
+    return this.tournamentService.generateBracket(id, userId);
+  }
+
   @Post(':id/register')
   @UseGuards(JwtAuthGuard)
   registerTeam(
@@ -64,6 +72,100 @@ export class TournamentController {
   @Get(':id/teams')
   getTournamentTeams(@Param('id') id: string) {
     return this.tournamentService.getTournamentTeams(id);
+  }
+
+  @Post(':id/open-registration')
+  @UseGuards(JwtAuthGuard)
+  openRegistration(@Param('id') id: string, @GetUser('id') userId: string) {
+    return this.tournamentService.openRegistration(id, userId);
+  }
+
+  @Post(':id/teams/:teamId/invite')
+  @UseGuards(JwtAuthGuard)
+  invitePlayerToTeam(
+    @Param('teamId') teamId: string,
+    @GetUser('id') userId: string,
+    @Body() body: { discordHandle: string },
+  ) {
+    return this.tournamentService.invitePlayerToTeam(teamId, body.discordHandle, userId);
+  }
+
+  @Patch('invites/:registrationId/respond')
+  @UseGuards(JwtAuthGuard)
+  respondToTeamInvite(
+    @Param('registrationId') registrationId: string,
+    @GetUser('id') userId: string,
+    @Body() body: { status: 'ACCEPTED' | 'REJECTED' },
+  ) {
+    return this.tournamentService.respondToTeamInvite(registrationId, userId, body.status);
+  }
+
+  @Get('invites/me')
+  @UseGuards(JwtAuthGuard)
+  getMyTeamInvites(@GetUser('id') userId: string) {
+    return this.tournamentService.getMyTeamInvites(userId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // TEAM REGISTRATION / JOIN FLOW
+  // Note: fixed-path routes (/my-team) must come before param routes (/:teamId)
+  // ---------------------------------------------------------------------------
+
+  @Post(':id/join-with-party')
+  @UseGuards(JwtAuthGuard)
+  joinWithParty(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.joinWithParty(id, userId);
+  }
+
+  @Post(':id/create-team')
+  @UseGuards(JwtAuthGuard)
+  createCustomTeam(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+    @Body('name') name: string,
+  ) {
+    return this.tournamentService.createCustomTeam(id, userId, name);
+  }
+
+  @Post(':id/join-team/:teamId')
+  @UseGuards(JwtAuthGuard)
+  joinExistingTeam(
+    @Param('id') id: string,
+    @Param('teamId') teamId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.joinExistingTeam(id, teamId, userId);
+  }
+
+  @Get(':id/my-team')
+  @UseGuards(JwtAuthGuard)
+  getMyTeamInTournament(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.getMyTeamInTournament(id, userId);
+  }
+
+  @Get(':id/teams/:teamId')
+  getTeam(
+    @Param('id') id: string,
+    @Param('teamId') teamId: string,
+  ) {
+    return this.tournamentService.getTeam(id, teamId);
+  }
+
+  @Delete(':id/teams/:teamId/members/:memberId')
+  @UseGuards(JwtAuthGuard)
+  removeTeamMember(
+    @Param('id') id: string,
+    @Param('teamId') teamId: string,
+    @Param('memberId') memberId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.removeTeamMember(id, teamId, memberId, userId);
   }
 
   @Patch(':id/matches/:matchId')
@@ -128,5 +230,67 @@ export class TournamentController {
   @UseGuards(JwtAuthGuard)
   remove(@Param('id') id: string, @GetUser() user: any) {
     return this.tournamentService.remove(id, user);
+  }
+
+  @Post(':id/go-live')
+  @UseGuards(JwtAuthGuard)
+  goLive(@Param('id') id: string, @GetUser('id') userId: string) {
+    return this.tournamentService.goLive(id, userId);
+  }
+
+  @Post(':id/seed')
+  @UseGuards(JwtAuthGuard, TournamentRoleGuard)
+  @TournamentRoles(TournamentRoleType.SEED_ADMIN, TournamentRoleType.TOURNAMENT_OVERSEER)
+  seedBracket(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.seedBracket(id, userId);
+  }
+
+  @Patch(':id/matches/:matchId/seed')
+  @UseGuards(JwtAuthGuard)
+  seedMatch(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @GetUser('id') userId: string,
+    @Body() body: { participant1Id?: string; participant2Id?: string },
+  ) {
+    return this.tournamentService.seedMatch(id, matchId, userId, body);
+  }
+
+  @Post(':id/matches/:matchId/disputes')
+  @UseGuards(JwtAuthGuard)
+  openDispute(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.openDispute(id, matchId, userId);
+  }
+
+  @Get(':id/matches/:matchId/disputes')
+  getDisputeByMatch(@Param('matchId') matchId: string) {
+    return this.tournamentService.getDisputeByMatch(matchId);
+  }
+
+  @Post('disputes/:disputeId/messages')
+  @UseGuards(JwtAuthGuard)
+  addDisputeMessage(
+    @Param('disputeId') disputeId: string,
+    @GetUser('id') userId: string,
+    @Body() body: { content: string },
+  ) {
+    return this.tournamentService.addDisputeMessage(disputeId, userId, body.content);
+  }
+
+  @Patch('disputes/:disputeId/resolve')
+  @UseGuards(JwtAuthGuard)
+  resolveDispute(
+    @Param('disputeId') disputeId: string,
+    @GetUser('id') userId: string,
+    @Body() body: { resolution: string; tournamentId: string },
+  ) {
+    return this.tournamentService.resolveDispute(disputeId, userId, body.resolution, body.tournamentId);
   }
 }

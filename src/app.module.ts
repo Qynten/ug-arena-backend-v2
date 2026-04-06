@@ -5,6 +5,9 @@ import { TournamentModule } from './tournament/tournament.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PartyModule } from './party/party.module';
+import { DisputeModule } from './dispute/dispute.module';
 import { RolesGuard } from './common/guards/roles.guard';
 
 @Module({
@@ -14,6 +17,9 @@ import { RolesGuard } from './common/guards/roles.guard';
     AuthModule,
     UsersModule,
     TournamentModule,
+    NotificationsModule,
+    PartyModule,
+    DisputeModule,
   ],
   controllers: [],
   providers: [

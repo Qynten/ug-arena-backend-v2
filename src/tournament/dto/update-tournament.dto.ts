@@ -8,9 +8,11 @@ import {
   IsDate,
   IsDateString,
   IsUUID,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreatePrizePoolDto } from './create-tournament.dto';
+import { BracketType } from '@prisma/client';
 
 export class UpdateTournamentDto {
   // --- Core identity ---
@@ -96,6 +98,11 @@ export class UpdateTournamentDto {
   @Min(1)
   @IsOptional()
   maxTeamSize?: number;
+
+  // --- Bracket ---
+  @IsEnum(BracketType)
+  @IsOptional()
+  bracketType?: BracketType;
 
   // --- Media ---
   @IsString()

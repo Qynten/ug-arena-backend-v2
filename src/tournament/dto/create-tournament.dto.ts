@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsUUID, IsArray, ValidateNested, IsDate, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsUUID, IsArray, ValidateNested, IsDate, IsDateString, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
+import { BracketType } from '@prisma/client';
 
 // 1. Define what a single Prize Pool must look like
 export class CreatePrizePoolDto {
@@ -48,6 +49,10 @@ export class CreateTournamentDto {
   @IsNumber()
   @Min(1)
   maxTeamSize!: number;
+
+  @IsEnum(BracketType)
+  @IsOptional()
+  bracketType?: BracketType;
 
   @IsDate()
   @IsOptional()

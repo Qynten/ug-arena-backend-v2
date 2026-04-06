@@ -34,6 +34,11 @@ model User {
   ownedTournaments        Tournament[]             @relation("TournamentOwner")
   staffAssignments        TournamentStaff[]
   accounts                UserAccount[]
+  notifications           Notification[]
+  
+  ownedParties            Party[]                  @relation("PartyOwner")
+  partyMemberships        PartyMember[]            @relation("PartyMemberships")
+  partyInvites            PartyInvite[]            @relation("PartyInvites")
 
   @@index([status])
   @@index([isBlocked])
@@ -70,6 +75,7 @@ model Tournament {
   startTime       DateTime             @default(now())
   imageUrl        String?
   type            TournamentType       @default(TEAM)
+  bracketType     BracketType          @default(SINGLE_ELIMINATION)
   status          TournamentStatus     @default(DRAFT)
   regStart        DateTime?
   regEnd          DateTime?
@@ -539,4 +545,65 @@ enum PrizePoolPosition {
   FIFTH
 }
 
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  payload   Json?            @default("{}")
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  TEAM_INVITE
+  TOURNAMENT_UPDATE
+  PARTY_INVITE
+}
+
+model Party {
+  id        String        @id @default(uuid())
+  name      String
+  ownerId   String
+  owner     User          @relation("PartyOwner", fields: [ownerId], references: [id])
+  members   PartyMember[]
+  invites   PartyInvite[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("parties")
+}
+
+model PartyMember {
+  id        String   @id @default(uuid())
+  partyId   String
+  userId    String
+  role      TeamPlayerRole @default(MEMBER)
+  party     Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user      User     @relation("PartyMemberships", fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([partyId, userId])
+  @@map("party_members")
+}
+
+model PartyInvite {
+  id        String       @id @default(uuid())
+  partyId   String
+  userId    String
+  status    CommonStatus @default(PENDING)
+  party     Party        @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user      User         @relation("PartyInvites", fields: [userId], references: [id])
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([partyId, userId])
+  @@map("party_invites")
+}
 
