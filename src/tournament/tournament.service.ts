@@ -1,10 +1,26 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { RegisterTeamDto } from './dto/register-team.dto';
 import { CreatePartyDto } from './dto/create-party.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole, TournamentRoleType, MatchStatus, TournamentStatus, TeamPlayerRole, NotificationType, CommonStatus, BracketType, MatchResult } from '@prisma/client';
+import {
+  UserRole,
+  TournamentRoleType,
+  MatchStatus,
+  TournamentStatus,
+  TeamPlayerRole,
+  NotificationType,
+  CommonStatus,
+  BracketType,
+  MatchResult,
+} from '@prisma/client';
 
 @Injectable()
 export class TournamentService {
@@ -23,7 +39,8 @@ export class TournamentService {
       throw new NotFoundException(`Tournament with ID ${tournamentId} not found.`);
     }
 
-    const isAdmin = user.roles?.includes(UserRole.ADMIN) || user.roles?.includes(UserRole.SUPER_ADMIN);
+    const isAdmin =
+      user.roles?.includes(UserRole.ADMIN) || user.roles?.includes(UserRole.SUPER_ADMIN);
     const isOwner = tournament.ownerId === user.id;
 
     if (!isAdmin && !isOwner) {
@@ -51,7 +68,7 @@ export class TournamentService {
     while (!isUnique) {
       const existing = await this.prisma.tournament.findUnique({
         where: { slug },
-        select: { id: true }
+        select: { id: true },
       });
       if (!existing) {
         isUnique = true;
@@ -74,7 +91,9 @@ export class TournamentService {
         name: createTournamentDto.name,
         game: createTournamentDto.game,
         region: createTournamentDto.region,
-        startTime: createTournamentDto.startTime ? new Date(createTournamentDto.startTime) : undefined,
+        startTime: createTournamentDto.startTime
+          ? new Date(createTournamentDto.startTime)
+          : undefined,
         imageUrl: createTournamentDto.imageUrl,
         regStart: createTournamentDto.regStart,
         regEnd: createTournamentDto.regEnd,
@@ -87,18 +106,20 @@ export class TournamentService {
         maxParticipants: createTournamentDto.maxParticipants,
         maxTeamSize: createTournamentDto.maxTeamSize,
         bracketType: createTournamentDto.bracketType,
-        
+
         owner: {
-          connect: { id: ownerId }
+          connect: { id: ownerId },
         },
-        
+
         // Dynamically map the array of prize pools from the request
-        prizePools: createTournamentDto.prizePools ? {
-          create: createTournamentDto.prizePools.map(pool => ({
-            position: pool.position as any,
-            amount: pool.amount,
-          })),
-        } : undefined,
+        prizePools: createTournamentDto.prizePools
+          ? {
+              create: createTournamentDto.prizePools.map((pool) => ({
+                position: pool.position as any,
+                amount: pool.amount,
+              })),
+            }
+          : undefined,
       },
       include: {
         owner: true,
@@ -107,7 +128,11 @@ export class TournamentService {
     });
   }
 
-  async assignStaff(tournamentId: string, ownerId: string, payload: { discordHandle: string; role: TournamentRoleType }) {
+  async assignStaff(
+    tournamentId: string,
+    ownerId: string,
+    payload: { discordHandle: string; role: TournamentRoleType },
+  ) {
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
       select: { ownerId: true },
@@ -123,13 +148,15 @@ export class TournamentService {
     }
 
     const { discordHandle, role } = payload;
-    
+
     const user = await this.prisma.user.findFirst({
       where: { discordName: discordHandle },
     });
 
     if (!user) {
-      throw new BadRequestException('User not found. Make sure they have logged into the website at least once!');
+      throw new BadRequestException(
+        'User not found. Make sure they have logged into the website at least once!',
+      );
     }
 
     try {
@@ -204,60 +231,72 @@ export class TournamentService {
     });
   }
 
-  async findMyTournaments(userId: string) {
-    return this.prisma.tournament.findMany({
-      where: {
-        isDeleted: false,
-        OR: [
-          { ownerId: userId },
-          { staff: { some: { userId } } },
-        ],
-      },
-      include: {
-        prizePools: true,
-        staff: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                discordName: true,
-                email: true,
-                photo: true,
+  async findMyTournaments(userId: string, pageStr?: string, limitStr?: string) {
+    const page = parseInt(pageStr || '1', 10);
+    const limit = parseInt(limitStr || '100', 10);
+    const skip = (page - 1) * limit;
+
+    const whereClause = {
+      isDeleted: false,
+      OR: [{ ownerId: userId }, { staff: { some: { userId } } }],
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.tournament.findMany({
+        where: whereClause,
+        include: {
+          prizePools: true,
+          staff: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  discordName: true,
+                  email: true,
+                  photo: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.tournament.count({ where: whereClause }),
+    ]);
+
+    return { data, meta: { total, page, limit } };
   }
 
   // 3. The logic from your old script.ts for fetching tournaments
-  async findAll() {
-    return this.prisma.tournament.findMany({
-      where: { isDeleted: false },
-      // Order them so the newest events show up at the top of the list
-      orderBy: {
-        createdAt: 'desc',
-      },
-      include: {
-        // Fetch the prize pools
-        prizePools: true,
-      },
-    });
+  async findAll(pageStr?: string, limitStr?: string) {
+    const page = parseInt(pageStr || '1', 10);
+    const limit = parseInt(limitStr || '100', 10);
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.tournament.findMany({
+        where: { isDeleted: false },
+        orderBy: { createdAt: 'desc' },
+        include: { prizePools: true },
+        skip,
+        take: limit,
+      }),
+      this.prisma.tournament.count({ where: { isDeleted: false } }),
+    ]);
+
+    return { data, meta: { total, page, limit } };
   }
 
   // (NestJS generated these placeholders for you to fill out later)
   async findOne(idOrSlug: string) {
     const tournament = await this.prisma.tournament.findFirst({
-      where: { 
+      where: {
         isDeleted: false,
-        OR: [
-          { id: idOrSlug },
-          { slug: idOrSlug }
-        ]
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
       },
       include: {
         prizePools: true,
@@ -289,27 +328,33 @@ export class TournamentService {
     const { prizePools, ...rest } = updateTournamentDto;
 
     // Build the prize pool update logic
-    const prizePoolUpdate = prizePools ? {
-      // 1. Delete prize pools that are not in the new list
-      deleteMany: {
-        id: {
-          notIn: prizePools.filter(p => p.id).map(p => p.id!)
+    const prizePoolUpdate = prizePools
+      ? {
+          // 1. Delete prize pools that are not in the new list
+          deleteMany: {
+            id: {
+              notIn: prizePools.filter((p) => p.id).map((p) => p.id!),
+            },
+          },
+          // 2. Update existing ones
+          update: prizePools
+            .filter((p) => p.id)
+            .map((pool) => ({
+              where: { id: pool.id },
+              data: {
+                position: pool.position as any,
+                amount: pool.amount,
+              },
+            })),
+          // 3. Create new ones
+          create: prizePools
+            .filter((p) => !p.id)
+            .map((pool) => ({
+              position: pool.position as any,
+              amount: pool.amount,
+            })),
         }
-      },
-      // 2. Update existing ones
-      update: prizePools.filter(p => p.id).map(pool => ({
-        where: { id: pool.id },
-        data: {
-          position: pool.position as any,
-          amount: pool.amount,
-        }
-      })),
-      // 3. Create new ones
-      create: prizePools.filter(p => !p.id).map(pool => ({
-        position: pool.position as any,
-        amount: pool.amount,
-      }))
-    } : undefined;
+      : undefined;
 
     try {
       return await this.prisma.tournament.update({
@@ -322,7 +367,7 @@ export class TournamentService {
         },
         include: {
           prizePools: true,
-        }
+        },
       });
     } catch (error) {
       // If Prisma can't find the UUID to update, throw our clean 404
@@ -466,8 +511,7 @@ export class TournamentService {
 
       // Resolve winner from scores if not a draw
       if (!isDraw) {
-        winnerId =
-          team1Score > team2Score ? match.participant1Id : match.participant2Id;
+        winnerId = team1Score > team2Score ? match.participant1Id : match.participant2Id;
       }
 
       // Write scores, winner, draw flag, and mark COMPLETED
@@ -487,13 +531,13 @@ export class TournamentService {
         const p1Result = isDraw
           ? MatchResult.DRAW
           : winnerId === match.participant1Id
-          ? MatchResult.WIN
-          : MatchResult.LOSS;
+            ? MatchResult.WIN
+            : MatchResult.LOSS;
         const p2Result = isDraw
           ? MatchResult.DRAW
           : winnerId === match.participant2Id
-          ? MatchResult.WIN
-          : MatchResult.LOSS;
+            ? MatchResult.WIN
+            : MatchResult.LOSS;
 
         await prisma.matchHistory.createMany({
           data: [
@@ -528,9 +572,7 @@ export class TournamentService {
           });
         } else if (winnerId) {
           const loserId =
-            winnerId === match.participant1Id
-              ? match.participant2Id
-              : match.participant1Id;
+            winnerId === match.participant1Id ? match.participant2Id : match.participant1Id;
           await prisma.participant.update({
             where: { id: winnerId },
             data: { wins: { increment: 1 } },
@@ -546,15 +588,11 @@ export class TournamentService {
 
       // Advance winner to next match (only if there IS a winner — not on draws)
       if (winnerId && !drawFlag) {
-        await this.advanceWinner(
-          { ...updatedMatch, winnerId },
-          prisma,
-          tournament.bracketType,
-        );
+        await this.advanceWinner({ ...updatedMatch, winnerId }, prisma, tournament.bracketType);
       } else if (drawFlag) {
         this.logger.log(
           `Match ${matchId} ended in a draw. No automatic progression. ` +
-          `${tournament.allowDraws ? 'Draw recorded.' : 'allowDraws=false — owner must decide overtime rules.'}`,
+            `${tournament.allowDraws ? 'Draw recorded.' : 'allowDraws=false — owner must decide overtime rules.'}`,
         );
       }
 
@@ -583,7 +621,7 @@ export class TournamentService {
     if (tournament.minTeamSize > 1) {
       throw new BadRequestException(
         `This tournament requires a minimum team size of ${tournament.minTeamSize}. ` +
-        `Please create a party, build your roster, then submit via POST /tournaments/:id/parties/:teamId/submit.`,
+          `Please create a party, build your roster, then submit via POST /tournaments/:id/parties/:teamId/submit.`,
       );
     }
 
@@ -649,7 +687,7 @@ export class TournamentService {
     });
   }
 
-  async getTournamentTeams(idOrSlug: string) {
+  async getTournamentTeams(idOrSlug: string, pageStr?: string, limitStr?: string) {
     const tournament = await this.prisma.tournament.findFirst({
       where: {
         isDeleted: false,
@@ -661,24 +699,35 @@ export class TournamentService {
       throw new NotFoundException(`Tournament not found.`);
     }
 
-    return this.prisma.team.findMany({
-      where: { tournamentId: tournament.id, isDeleted: false },
-      include: {
-        players: {
-          where: { role: TeamPlayerRole.CAPTAIN },
-          include: {
-            player: {
-              select: {
-                id: true,
-                discordName: true,
-                displayName: true,
-                photo: true,
+    const page = parseInt(pageStr || '1', 10);
+    const limit = parseInt(limitStr || '100', 10);
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { tournamentId: tournament.id, isDeleted: false },
+        include: {
+          players: {
+            where: { role: TeamPlayerRole.CAPTAIN },
+            include: {
+              player: {
+                select: {
+                  id: true,
+                  discordName: true,
+                  displayName: true,
+                  photo: true,
+                },
               },
             },
           },
         },
-      },
-    });
+        skip,
+        take: limit,
+      }),
+      this.prisma.team.count({ where: { tournamentId: tournament.id, isDeleted: false } }),
+    ]);
+
+    return { data, meta: { total, page, limit } };
   }
 
   async openRegistration(idOrSlug: string, userId: string) {
@@ -690,9 +739,12 @@ export class TournamentService {
     });
 
     if (!tournament) throw new NotFoundException(`Tournament not found.`);
-    if (tournament.ownerId !== userId) throw new ForbiddenException('Only the tournament owner can open registration.');
+    if (tournament.ownerId !== userId)
+      throw new ForbiddenException('Only the tournament owner can open registration.');
     if (tournament.status !== TournamentStatus.DRAFT) {
-      throw new BadRequestException(`Registration can only be opened from DRAFT status. Current status: ${tournament.status}`);
+      throw new BadRequestException(
+        `Registration can only be opened from DRAFT status. Current status: ${tournament.status}`,
+      );
     }
 
     return this.prisma.tournament.update({
@@ -712,7 +764,8 @@ export class TournamentService {
     });
 
     if (!team) throw new NotFoundException(`Team not found.`);
-    if (team.players.length === 0) throw new ForbiddenException('Only the team captain can invite players.');
+    if (team.players.length === 0)
+      throw new ForbiddenException('Only the team captain can invite players.');
 
     // Find the invitee by Discord handle
     const invitee = await this.prisma.user.findFirst({
@@ -720,7 +773,9 @@ export class TournamentService {
     });
 
     if (!invitee) {
-      throw new BadRequestException(`No user found with Discord handle "${inviteeDiscordHandle}". Make sure they have logged in at least once.`);
+      throw new BadRequestException(
+        `No user found with Discord handle "${inviteeDiscordHandle}". Make sure they have logged in at least once.`,
+      );
     }
 
     // Check if already on the team or has a pending invite
@@ -729,7 +784,9 @@ export class TournamentService {
     });
 
     if (existingInvite) {
-      throw new BadRequestException('This player already has a pending or accepted invite for this team.');
+      throw new BadRequestException(
+        'This player already has a pending or accepted invite for this team.',
+      );
     }
 
     const existingPlayer = await this.prisma.teamPlayer.findUnique({
@@ -750,7 +807,10 @@ export class TournamentService {
     return this.prisma.$transaction(async (prisma) => {
       const registration = await prisma.teamPlayerRegistration.create({
         data: { teamId, playerId: invitee.id, status: CommonStatus.PENDING },
-        include: { team: true, player: { select: { id: true, discordName: true, displayName: true } } },
+        include: {
+          team: true,
+          player: { select: { id: true, discordName: true, displayName: true } },
+        },
       });
 
       await prisma.notification.create({
@@ -767,14 +827,20 @@ export class TournamentService {
     });
   }
 
-  async respondToTeamInvite(registrationId: string, playerId: string, status: 'ACCEPTED' | 'REJECTED') {
+  async respondToTeamInvite(
+    registrationId: string,
+    playerId: string,
+    status: 'ACCEPTED' | 'REJECTED',
+  ) {
     const registration = await this.prisma.teamPlayerRegistration.findUnique({
       where: { id: registrationId },
     });
 
     if (!registration) throw new NotFoundException(`Invite not found.`);
-    if (registration.playerId !== playerId) throw new ForbiddenException('You can only respond to your own invites.');
-    if (registration.status !== CommonStatus.PENDING) throw new BadRequestException('This invite has already been responded to.');
+    if (registration.playerId !== playerId)
+      throw new ForbiddenException('You can only respond to your own invites.');
+    if (registration.status !== CommonStatus.PENDING)
+      throw new BadRequestException('This invite has already been responded to.');
 
     const newStatus = status === 'ACCEPTED' ? CommonStatus.ACCEPTED : CommonStatus.REJECTED;
 
@@ -807,7 +873,9 @@ export class TournamentService {
             tournament: { select: { id: true, name: true, slug: true, status: true } },
             players: {
               where: { role: TeamPlayerRole.CAPTAIN },
-              include: { player: { select: { id: true, discordName: true, displayName: true, photo: true } } },
+              include: {
+                player: { select: { id: true, discordName: true, displayName: true, photo: true } },
+              },
             },
           },
         },
@@ -833,7 +901,9 @@ export class TournamentService {
     }
 
     if (tournament.status !== TournamentStatus.REGISTRATION) {
-      throw new BadRequestException('Tournament must be in REGISTRATION status to generate the bracket.');
+      throw new BadRequestException(
+        'Tournament must be in REGISTRATION status to generate the bracket.',
+      );
     }
 
     const participants = await this.prisma.participant.findMany({
@@ -961,9 +1031,12 @@ export class TournamentService {
       where: { isDeleted: false, OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
     });
     if (!tournament) throw new NotFoundException(`Tournament not found.`);
-    if (tournament.ownerId !== userId) throw new ForbiddenException('Only the tournament owner can start the tournament.');
+    if (tournament.ownerId !== userId)
+      throw new ForbiddenException('Only the tournament owner can start the tournament.');
     if (tournament.status !== TournamentStatus.SEEDING) {
-      throw new BadRequestException(`Tournament must be in SEEDING status to go live. Current: ${tournament.status}`);
+      throw new BadRequestException(
+        `Tournament must be in SEEDING status to go live. Current: ${tournament.status}`,
+      );
     }
     return this.prisma.tournament.update({
       where: { id: tournament.id },
@@ -997,7 +1070,9 @@ export class TournamentService {
     });
 
     if (participants.length < 2) {
-      throw new BadRequestException('At least 2 registered participants are required to seed the bracket.');
+      throw new BadRequestException(
+        'At least 2 registered participants are required to seed the bracket.',
+      );
     }
 
     // Fetch Round 1 (lowest round number)
@@ -1023,7 +1098,13 @@ export class TournamentService {
       // Step 1: Clear existing participant slots in Round 1 (idempotent)
       await prisma.match.updateMany({
         where: { roundId: round1.id },
-        data: { participant1Id: null, participant2Id: null, winnerId: null, status: MatchStatus.PENDING, draw: false },
+        data: {
+          participant1Id: null,
+          participant2Id: null,
+          winnerId: null,
+          status: MatchStatus.PENDING,
+          draw: false,
+        },
       });
 
       // Step 2: Assign participants into match slots sequentially
@@ -1036,7 +1117,8 @@ export class TournamentService {
         slots.push({ matchIndex: round1Matches.indexOf(m), slot: 'participant2Id' });
       }
 
-      const slotAssignments: Record<string, { participant1Id?: string; participant2Id?: string }> = {};
+      const slotAssignments: Record<string, { participant1Id?: string; participant2Id?: string }> =
+        {};
 
       for (let i = 0; i < participants.length && i < slots.length; i++) {
         const { matchIndex, slot } = slots[i];
@@ -1088,14 +1170,26 @@ export class TournamentService {
         }
       }
 
-      this.logger.log(`Bracket seeded for tournament ${tournamentId}: ${participants.length} participants across ${round1Matches.length} Round 1 matches.`);
+      this.logger.log(
+        `Bracket seeded for tournament ${tournamentId}: ${participants.length} participants across ${round1Matches.length} Round 1 matches.`,
+      );
 
       // Return the full updated bracket
       return prisma.match.findMany({
         where: { tournamentId },
         include: {
-          participant1: { include: { team: { select: { id: true, name: true } }, user: { select: { id: true, discordName: true, photo: true } } } },
-          participant2: { include: { team: { select: { id: true, name: true } }, user: { select: { id: true, discordName: true, photo: true } } } },
+          participant1: {
+            include: {
+              team: { select: { id: true, name: true } },
+              user: { select: { id: true, discordName: true, photo: true } },
+            },
+          },
+          participant2: {
+            include: {
+              team: { select: { id: true, name: true } },
+              user: { select: { id: true, discordName: true, photo: true } },
+            },
+          },
           round: true,
         },
         orderBy: { createdAt: 'asc' },
@@ -1108,7 +1202,14 @@ export class TournamentService {
    * slot in the next match. Also routes the loser in DOUBLE_ELIMINATION brackets.
    */
   private async advanceWinner(
-    match: { id: string; winnerId: string; participant1Id: string | null; participant2Id: string | null; nextMatchId: string | null; loserMoveToMatchId: string | null },
+    match: {
+      id: string;
+      winnerId: string;
+      participant1Id: string | null;
+      participant2Id: string | null;
+      nextMatchId: string | null;
+      loserMoveToMatchId: string | null;
+    },
     prisma: any,
     bracketType: BracketType,
   ) {
@@ -1124,7 +1225,9 @@ export class TournamentService {
           where: { id: match.nextMatchId },
           data: { [slot]: match.winnerId },
         });
-        this.logger.log(`Winner ${match.winnerId} advanced to match ${match.nextMatchId} (slot: ${slot}).`);
+        this.logger.log(
+          `Winner ${match.winnerId} advanced to match ${match.nextMatchId} (slot: ${slot}).`,
+        );
       }
     }
 
@@ -1133,15 +1236,13 @@ export class TournamentService {
       if (!match.loserMoveToMatchId) {
         this.logger.warn(
           `DOUBLE_ELIMINATION: match ${match.id} has no loserMoveToMatchId set. ` +
-          `Loser bracket routing skipped. Update the bracket generator to populate this field.`,
+            `Loser bracket routing skipped. Update the bracket generator to populate this field.`,
         );
         return;
       }
 
       const loserId =
-        match.winnerId === match.participant1Id
-          ? match.participant2Id
-          : match.participant1Id;
+        match.winnerId === match.participant1Id ? match.participant2Id : match.participant1Id;
 
       if (loserId) {
         const loserMatch = await prisma.match.findUnique({
@@ -1154,7 +1255,9 @@ export class TournamentService {
             where: { id: match.loserMoveToMatchId },
             data: { [slot]: loserId },
           });
-          this.logger.log(`Loser ${loserId} routed to losers-bracket match ${match.loserMoveToMatchId} (slot: ${slot}).`);
+          this.logger.log(
+            `Loser ${loserId} routed to losers-bracket match ${match.loserMoveToMatchId} (slot: ${slot}).`,
+          );
         }
       }
     }
@@ -1194,13 +1297,13 @@ export class TournamentService {
   }
 
   async openDispute(tournamentId: string, matchId: string, userId: string) {
-
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
       select: { tournamentId: true, status: true },
     });
     if (!match) throw new NotFoundException(`Match not found.`);
-    if (match.tournamentId !== tournamentId) throw new BadRequestException('Match does not belong to this tournament.');
+    if (match.tournamentId !== tournamentId)
+      throw new BadRequestException('Match does not belong to this tournament.');
 
     const existing = await this.prisma.matchDispute.findFirst({
       where: { matchId, status: { not: 'RESOLVED' } },
@@ -1210,7 +1313,14 @@ export class TournamentService {
     return this.prisma.$transaction(async (prisma) => {
       const dispute = await prisma.matchDispute.create({
         data: { matchId, reportedById: userId },
-        include: { messages: { include: { sender: { select: { id: true, discordName: true, displayName: true, photo: true } } } }, reportedBy: { select: { id: true, discordName: true, displayName: true } } },
+        include: {
+          messages: {
+            include: {
+              sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
+            },
+          },
+          reportedBy: { select: { id: true, discordName: true, displayName: true } },
+        },
       });
       await prisma.match.update({ where: { id: matchId }, data: { status: 'DISPUTED' } });
       return dispute;
@@ -1226,7 +1336,9 @@ export class TournamentService {
         resolvedBy: { select: { id: true, discordName: true, displayName: true } },
         messages: {
           orderBy: { createdAt: 'asc' },
-          include: { sender: { select: { id: true, discordName: true, displayName: true, photo: true } } },
+          include: {
+            sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
+          },
         },
       },
     });
@@ -1235,21 +1347,30 @@ export class TournamentService {
   async addDisputeMessage(disputeId: string, senderId: string, content: string) {
     const dispute = await this.prisma.matchDispute.findUnique({ where: { id: disputeId } });
     if (!dispute) throw new NotFoundException(`Dispute not found.`);
-    if (dispute.status === 'RESOLVED') throw new BadRequestException('Cannot add messages to a resolved dispute.');
+    if (dispute.status === 'RESOLVED')
+      throw new BadRequestException('Cannot add messages to a resolved dispute.');
 
     return this.prisma.disputeMessage.create({
       data: { disputeId, senderId, content },
-      include: { sender: { select: { id: true, discordName: true, displayName: true, photo: true } } },
+      include: {
+        sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
+      },
     });
   }
 
-  async resolveDispute(disputeId: string, resolverId: string, resolution: string, tournamentId: string) {
+  async resolveDispute(
+    disputeId: string,
+    resolverId: string,
+    resolution: string,
+    tournamentId: string,
+  ) {
     const dispute = await this.prisma.matchDispute.findUnique({
       where: { id: disputeId },
       include: { match: { select: { tournamentId: true } } },
     });
     if (!dispute) throw new NotFoundException(`Dispute not found.`);
-    if (dispute.status === 'RESOLVED') throw new BadRequestException('Dispute is already resolved.');
+    if (dispute.status === 'RESOLVED')
+      throw new BadRequestException('Dispute is already resolved.');
 
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
@@ -1266,7 +1387,12 @@ export class TournamentService {
       where: { id: disputeId },
       data: { status: 'RESOLVED', resolution, resolvedById: resolverId },
       include: {
-        messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, discordName: true, displayName: true, photo: true } } } },
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
+          },
+        },
         resolvedBy: { select: { id: true, discordName: true, displayName: true } },
       },
     });
@@ -1294,34 +1420,45 @@ export class TournamentService {
       where: { userId },
       include: {
         party: {
-          include: { members: true }
-        }
-      }
+          include: { members: true },
+        },
+      },
     });
 
     if (!partyMember) throw new BadRequestException('You are not in a party.');
-    if (partyMember.party.ownerId !== userId) throw new BadRequestException('Only the party captain can register the party into a tournament.');
+    if (partyMember.party.ownerId !== userId)
+      throw new BadRequestException(
+        'Only the party captain can register the party into a tournament.',
+      );
 
     const memberCount = partyMember.party.members.length;
     if (memberCount < tournament.minTeamSize || memberCount > tournament.maxTeamSize) {
-      throw new BadRequestException(`Your party has ${memberCount} members. This tournament requires between ${tournament.minTeamSize} and ${tournament.maxTeamSize} members.`);
+      throw new BadRequestException(
+        `Your party has ${memberCount} members. This tournament requires between ${tournament.minTeamSize} and ${tournament.maxTeamSize} members.`,
+      );
     }
 
     const memberIds = partyMember.party.members.map((m: any) => m.userId);
-    
+
     // Check if any party member is already in a team or registered
     const existingTeamPlayer = await this.prisma.teamPlayer.findFirst({
       where: {
         playerId: { in: memberIds },
-        team: { tournamentId: tournament.id, isDeleted: false }
-      }
+        team: { tournamentId: tournament.id, isDeleted: false },
+      },
     });
-    if (existingTeamPlayer) throw new BadRequestException('A member of your party is already part of another team in this tournament.');
+    if (existingTeamPlayer)
+      throw new BadRequestException(
+        'A member of your party is already part of another team in this tournament.',
+      );
 
     const existingParticipant = await this.prisma.participant.findFirst({
-      where: { tournamentId: tournament.id, userId: { in: memberIds } }
+      where: { tournamentId: tournament.id, userId: { in: memberIds } },
     });
-    if (existingParticipant) throw new BadRequestException('A member of your party is already registered in this tournament.');
+    if (existingParticipant)
+      throw new BadRequestException(
+        'A member of your party is already registered in this tournament.',
+      );
 
     // Create Team snapshot and automatically submit it
     return this.prisma.$transaction(async (prisma) => {
@@ -1332,11 +1469,11 @@ export class TournamentService {
           players: {
             create: partyMember.party.members.map((m: any) => ({
               playerId: m.userId,
-              role: m.role
-            }))
-          }
+              role: m.role,
+            })),
+          },
         },
-        include: { players: true }
+        include: { players: true },
       });
 
       const participant = await prisma.participant.create({
@@ -1347,14 +1484,24 @@ export class TournamentService {
           rosters: {
             create: team.players.map((tp: any) => ({
               userId: tp.playerId,
-              role: tp.role
-            }))
-          }
+              role: tp.role,
+            })),
+          },
         },
         include: {
-          team: { include: { players: { include: { player: { select: { id: true, discordName: true, displayName: true, photo: true } } } } } },
-          rosters: true
-        }
+          team: {
+            include: {
+              players: {
+                include: {
+                  player: {
+                    select: { id: true, discordName: true, displayName: true, photo: true },
+                  },
+                },
+              },
+            },
+          },
+          rosters: true,
+        },
       });
       return participant;
     });
@@ -1381,12 +1528,14 @@ export class TournamentService {
     const existingMembership = await this.prisma.teamPlayer.findFirst({
       where: { playerId: userId, team: { tournamentId: tournament.id, isDeleted: false } },
     });
-    if (existingMembership) throw new BadRequestException('You are already part of a team in this tournament.');
+    if (existingMembership)
+      throw new BadRequestException('You are already part of a team in this tournament.');
 
     const existingParticipant = await this.prisma.participant.findFirst({
       where: { tournamentId: tournament.id, userId },
     });
-    if (existingParticipant) throw new BadRequestException('You are already registered for this tournament.');
+    if (existingParticipant)
+      throw new BadRequestException('You are already registered for this tournament.');
 
     return this.prisma.team.create({
       data: {
@@ -1400,7 +1549,11 @@ export class TournamentService {
         },
       },
       include: {
-        players: { include: { player: { select: { id: true, discordName: true, displayName: true, photo: true } } } },
+        players: {
+          include: {
+            player: { select: { id: true, discordName: true, displayName: true, photo: true } },
+          },
+        },
       },
     });
   }
@@ -1421,7 +1574,7 @@ export class TournamentService {
 
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },
-      include: { players: true, participants: true }
+      include: { players: true, participants: true },
     });
 
     if (!team || team.isDeleted || team.tournamentId !== tournament.id) {
@@ -1435,7 +1588,8 @@ export class TournamentService {
     const existingMembership = await this.prisma.teamPlayer.findFirst({
       where: { playerId: userId, team: { tournamentId: tournament.id, isDeleted: false } },
     });
-    if (existingMembership) throw new BadRequestException('You are already in a team for this tournament.');
+    if (existingMembership)
+      throw new BadRequestException('You are already in a team for this tournament.');
 
     return this.prisma.$transaction(async (prisma) => {
       // Add to team
@@ -1443,8 +1597,8 @@ export class TournamentService {
         data: {
           teamId,
           playerId: userId,
-          role: TeamPlayerRole.MEMBER
-        }
+          role: TeamPlayerRole.MEMBER,
+        },
       });
 
       // If team is already submitted, update roster
@@ -1453,8 +1607,8 @@ export class TournamentService {
           data: {
             participantId: team.participants[0].id,
             userId,
-            role: TeamPlayerRole.MEMBER
-          }
+            role: TeamPlayerRole.MEMBER,
+          },
         });
       }
 
@@ -1600,7 +1754,9 @@ export class TournamentService {
 
     // Cannot remove yourself (use team deletion instead)
     if (memberId === requesterId) {
-      throw new BadRequestException('The captain cannot remove themselves. Delete the team instead.');
+      throw new BadRequestException(
+        'The captain cannot remove themselves. Delete the team instead.',
+      );
     }
 
     const memberRecord = team.players.find((p) => p.playerId === memberId);

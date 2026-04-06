@@ -5,10 +5,7 @@ import { DisputeService } from './dispute.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule.register({}),
-  ],
+  imports: [PrismaModule, JwtModule.register({})],
   providers: [DisputeGateway, DisputeService],
 })
 export class DisputeModule {}

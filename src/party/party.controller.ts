@@ -31,7 +31,11 @@ export class PartyController {
   }
 
   @Post('invites/:id/respond')
-  respondToInvite(@Param('id') inviteId: string, @Req() req: any, @Body('status') status: CommonStatus) {
+  respondToInvite(
+    @Param('id') inviteId: string,
+    @Req() req: any,
+    @Body('status') status: CommonStatus,
+  ) {
     return this.partyService.respondToInvite(inviteId, req.user.id, status);
   }
 

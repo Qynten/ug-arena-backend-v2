@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePartyDto } from './dto/create-party.dto';
 import { InvitePlayerDto } from './dto/invite-player.dto';
@@ -14,7 +19,9 @@ export class PartyService {
     });
 
     if (existingParty) {
-      throw new BadRequestException('You are already in a party. Leave it first before creating a new one.');
+      throw new BadRequestException(
+        'You are already in a party. Leave it first before creating a new one.',
+      );
     }
 
     return this.prisma.party.create({
@@ -30,7 +37,9 @@ export class PartyService {
       },
       include: {
         members: {
-          include: { user: { select: { id: true, discordName: true, displayName: true, photo: true } } },
+          include: {
+            user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+          },
         },
       },
     });
@@ -43,11 +52,15 @@ export class PartyService {
         party: {
           include: {
             members: {
-              include: { user: { select: { id: true, discordName: true, displayName: true, photo: true } } },
+              include: {
+                user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+              },
             },
             invites: {
               where: { status: CommonStatus.PENDING },
-              include: { user: { select: { id: true, discordName: true, displayName: true, photo: true } } },
+              include: {
+                user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+              },
               orderBy: { createdAt: 'desc' },
             },
           },
@@ -65,7 +78,8 @@ export class PartyService {
     });
 
     if (!party) throw new NotFoundException('Party not found.');
-    if (party.ownerId !== userId) throw new ForbiddenException('Only the party captain can invite players.');
+    if (party.ownerId !== userId)
+      throw new ForbiddenException('Only the party captain can invite players.');
 
     const targetUser = await this.prisma.user.findFirst({
       where: { discordName: dto.discordHandle },
@@ -81,7 +95,8 @@ export class PartyService {
       where: { partyId, userId: targetUser.id, status: CommonStatus.PENDING },
     });
 
-    if (existingInvite) throw new BadRequestException('An active invite has already been sent to this user.');
+    if (existingInvite)
+      throw new BadRequestException('An active invite has already been sent to this user.');
 
     const invite = await this.prisma.partyInvite.create({
       data: {
@@ -128,7 +143,8 @@ export class PartyService {
 
     if (!invite) throw new NotFoundException('Invite not found.');
     if (invite.userId !== userId) throw new ForbiddenException('Not authorized.');
-    if (invite.status !== CommonStatus.PENDING) throw new BadRequestException('Invite is no longer pending.');
+    if (invite.status !== CommonStatus.PENDING)
+      throw new BadRequestException('Invite is no longer pending.');
 
     return this.prisma.$transaction(async (prisma) => {
       // 1. Update the invite status
@@ -145,7 +161,9 @@ export class PartyService {
 
         if (existingMembership) {
           // Check if they are the captain of that party
-          const oldParty = await prisma.party.findUnique({ where: { id: existingMembership.partyId } });
+          const oldParty = await prisma.party.findUnique({
+            where: { id: existingMembership.partyId },
+          });
           if (oldParty?.ownerId === userId) {
             // Disband the old party
             await prisma.party.delete({ where: { id: oldParty.id } });

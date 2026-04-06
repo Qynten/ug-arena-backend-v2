@@ -116,4 +116,3 @@ export class UpdateTournamentDto {
   @IsOptional()
   prizePools?: CreatePrizePoolDto[];
 }
-

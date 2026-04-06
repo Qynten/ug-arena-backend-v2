@@ -95,7 +95,9 @@ export class AuthService {
           email: user.email,
           displayName: user.displayName || global_name || username,
           discordName: user.discordName || username,
-          photo: user.photo || (avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : null),
+          photo:
+            user.photo ||
+            (avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : null),
           roles: user.roles,
         },
         ...tokens,
@@ -123,10 +125,7 @@ export class AuthService {
     }
 
     // 3. Hash Comparison (Stateful Check for Rotation)
-    const refreshTokenMatches = await bcrypt.compare(
-      refreshToken,
-      user.refreshTokenHash,
-    );
+    const refreshTokenMatches = await bcrypt.compare(refreshToken, user.refreshTokenHash);
     if (!refreshTokenMatches) {
       throw new UnauthorizedException('Access Denied');
     }

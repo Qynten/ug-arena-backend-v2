@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  Query,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -8,6 +20,12 @@ import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { RegisterTeamDto } from './dto/register-team.dto';
 import { CreatePartyDto } from './dto/create-party.dto';
+import { UpdateMatchScoreDto } from './dto/update-match-score.dto';
+import { InvitePlayerDto } from './dto/invite-player.dto';
+import { RespondTeamInviteDto } from './dto/respond-team-invite.dto';
+import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { CreateCustomTeamDto } from './dto/create-custom-team.dto';
+import { AddDisputeMessageDto } from './dto/add-dispute-message.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { TournamentRoleGuard } from '../common/guards/tournament-role.guard';
@@ -21,16 +39,18 @@ export class TournamentController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('image', {
-    storage: diskStorage({
-      destination: './uploads',
-      filename: (req, file, callback) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        const ext = extname(file.originalname);
-        callback(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-      },
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, callback) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          callback(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+        },
+      }),
     }),
-  }))
+  )
   // REMOVED the @Roles decorator here so any logged-in user can create!
   create(
     @Body() createTournamentDto: CreateTournamentDto,
@@ -70,8 +90,12 @@ export class TournamentController {
   }
 
   @Get(':id/teams')
-  getTournamentTeams(@Param('id') id: string) {
-    return this.tournamentService.getTournamentTeams(id);
+  getTournamentTeams(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.tournamentService.getTournamentTeams(id, page, limit);
   }
 
   @Post(':id/open-registration')
@@ -85,7 +109,7 @@ export class TournamentController {
   invitePlayerToTeam(
     @Param('teamId') teamId: string,
     @GetUser('id') userId: string,
-    @Body() body: { discordHandle: string },
+    @Body() body: InvitePlayerDto,
   ) {
     return this.tournamentService.invitePlayerToTeam(teamId, body.discordHandle, userId);
   }
@@ -95,7 +119,7 @@ export class TournamentController {
   respondToTeamInvite(
     @Param('registrationId') registrationId: string,
     @GetUser('id') userId: string,
-    @Body() body: { status: 'ACCEPTED' | 'REJECTED' },
+    @Body() body: RespondTeamInviteDto,
   ) {
     return this.tournamentService.respondToTeamInvite(registrationId, userId, body.status);
   }
@@ -113,10 +137,7 @@ export class TournamentController {
 
   @Post(':id/join-with-party')
   @UseGuards(JwtAuthGuard)
-  joinWithParty(
-    @Param('id') id: string,
-    @GetUser('id') userId: string,
-  ) {
+  joinWithParty(@Param('id') id: string, @GetUser('id') userId: string) {
     return this.tournamentService.joinWithParty(id, userId);
   }
 
@@ -125,9 +146,9 @@ export class TournamentController {
   createCustomTeam(
     @Param('id') id: string,
     @GetUser('id') userId: string,
-    @Body('name') name: string,
+    @Body() body: CreateCustomTeamDto,
   ) {
-    return this.tournamentService.createCustomTeam(id, userId, name);
+    return this.tournamentService.createCustomTeam(id, userId, body.name);
   }
 
   @Post(':id/join-team/:teamId')
@@ -142,18 +163,12 @@ export class TournamentController {
 
   @Get(':id/my-team')
   @UseGuards(JwtAuthGuard)
-  getMyTeamInTournament(
-    @Param('id') id: string,
-    @GetUser('id') userId: string,
-  ) {
+  getMyTeamInTournament(@Param('id') id: string, @GetUser('id') userId: string) {
     return this.tournamentService.getMyTeamInTournament(id, userId);
   }
 
   @Get(':id/teams/:teamId')
-  getTeam(
-    @Param('id') id: string,
-    @Param('teamId') teamId: string,
-  ) {
+  getTeam(@Param('id') id: string, @Param('teamId') teamId: string) {
     return this.tournamentService.getTeam(id, teamId);
   }
 
@@ -174,7 +189,7 @@ export class TournamentController {
     @Param('id') id: string,
     @Param('matchId') matchId: string,
     @GetUser('id') userId: string,
-    @Body() payload: { team1Score: number; team2Score: number },
+    @Body() payload: UpdateMatchScoreDto,
   ) {
     return this.tournamentService.updateMatchScore(id, matchId, userId, payload);
   }
@@ -200,14 +215,18 @@ export class TournamentController {
   }
 
   @Get()
-  findAll() {
-    return this.tournamentService.findAll();
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.tournamentService.findAll(page, limit);
   }
 
   @Get('my-tournaments')
   @UseGuards(JwtAuthGuard)
-  findMyTournaments(@GetUser('id') userId: string) {
-    return this.tournamentService.findMyTournaments(userId);
+  findMyTournaments(
+    @GetUser('id') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.tournamentService.findMyTournaments(userId, page, limit);
   }
 
   @Get(':id')
@@ -241,10 +260,7 @@ export class TournamentController {
   @Post(':id/seed')
   @UseGuards(JwtAuthGuard, TournamentRoleGuard)
   @TournamentRoles(TournamentRoleType.SEED_ADMIN, TournamentRoleType.TOURNAMENT_OVERSEER)
-  seedBracket(
-    @Param('id') id: string,
-    @GetUser('id') userId: string,
-  ) {
+  seedBracket(@Param('id') id: string, @GetUser('id') userId: string) {
     return this.tournamentService.seedBracket(id, userId);
   }
 
@@ -279,7 +295,7 @@ export class TournamentController {
   addDisputeMessage(
     @Param('disputeId') disputeId: string,
     @GetUser('id') userId: string,
-    @Body() body: { content: string },
+    @Body() body: AddDisputeMessageDto,
   ) {
     return this.tournamentService.addDisputeMessage(disputeId, userId, body.content);
   }
@@ -289,8 +305,13 @@ export class TournamentController {
   resolveDispute(
     @Param('disputeId') disputeId: string,
     @GetUser('id') userId: string,
-    @Body() body: { resolution: string; tournamentId: string },
+    @Body() body: ResolveDisputeDto,
   ) {
-    return this.tournamentService.resolveDispute(disputeId, userId, body.resolution, body.tournamentId);
+    return this.tournamentService.resolveDispute(
+      disputeId,
+      userId,
+      body.resolution,
+      body.tournamentId,
+    );
   }
 }

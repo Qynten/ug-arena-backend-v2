@@ -5,11 +5,22 @@ import { PrismaService } from '../prisma/prisma.service';
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
-  async getMyNotifications(userId: string) {
-    return this.prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
+  async getMyNotifications(userId: string, pageStr?: string, limitStr?: string) {
+    const page = parseInt(pageStr || '1', 10);
+    const limit = parseInt(limitStr || '100', 10);
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.notification.count({ where: { userId } }),
+    ]);
+
+    return { data, meta: { total, page, limit } };
   }
 
   async getUnreadCount(userId: string) {
@@ -25,7 +36,8 @@ export class NotificationsService {
     });
 
     if (!notification) throw new NotFoundException('Notification not found.');
-    if (notification.userId !== userId) throw new ForbiddenException('Cannot mark another user\'s notification as read.');
+    if (notification.userId !== userId)
+      throw new ForbiddenException("Cannot mark another user's notification as read.");
 
     return this.prisma.notification.update({
       where: { id: notificationId },

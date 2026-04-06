@@ -1,4 +1,16 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsUUID, IsArray, ValidateNested, IsDate, IsDateString, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  Min,
+  IsUUID,
+  IsArray,
+  ValidateNested,
+  IsDate,
+  IsDateString,
+  IsEnum,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { BracketType } from '@prisma/client';
 

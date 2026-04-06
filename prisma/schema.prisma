@@ -8,24 +8,24 @@ datasource db {
 }
 
 model User {
-  id                      String                   @id @default(uuid())
-  discordName             String?                  @map("name")
-  displayName             String?
-  email                   String                   @unique
-  password                String?
-  refreshTokenHash        String?
-  photo                   String?
-  contactNO               String?
-  location                String?
-  status                  UserStatus               @default(ACTIVE)
-  roles                   UserRole[]               @default([PLAYER])
-  isBlocked               Boolean                  @default(false)
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  disputeEvidence         DisputeEvidence[]
-  disputeMessages         DisputeMessage[]
-  disputesReported        MatchDispute[]           @relation("ReportedBy")
-  disputesResolved        MatchDispute[]           @relation("ResolvedBy")
+  id               String            @id @default(uuid())
+  discordName      String?           @map("name")
+  displayName      String?
+  email            String            @unique
+  password         String?
+  refreshTokenHash String?
+  photo            String?
+  contactNO        String?
+  location         String?
+  status           UserStatus        @default(ACTIVE)
+  roles            UserRole[]        @default([PLAYER])
+  isBlocked        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  disputeEvidence  DisputeEvidence[]
+  disputeMessages  DisputeMessage[]
+  disputesReported MatchDispute[]    @relation("ReportedBy")
+  disputesResolved MatchDispute[]    @relation("ResolvedBy")
 
   participants            Participant[]            @relation("UserParticipants")
   teamPlayerRegistrations TeamPlayerRegistration[] @relation("PlayerTeamPlayerRegistrations")
@@ -35,10 +35,10 @@ model User {
   staffAssignments        TournamentStaff[]
   accounts                UserAccount[]
   notifications           Notification[]
-  
-  ownedParties            Party[]                  @relation("PartyOwner")
-  partyMemberships        PartyMember[]            @relation("PartyMemberships")
-  partyInvites            PartyInvite[]            @relation("PartyInvites")
+
+  ownedParties     Party[]       @relation("PartyOwner")
+  partyMemberships PartyMember[] @relation("PartyMemberships")
+  partyInvites     PartyInvite[] @relation("PartyInvites")
 
   @@index([status])
   @@index([isBlocked])
@@ -62,8 +62,6 @@ model UserAccount {
   @@index([userId])
   @@map("user_accounts")
 }
-
-
 
 model Tournament {
   id              String               @id @default(uuid())
@@ -116,6 +114,7 @@ model Tournament {
   @@index([game])
   @@index([region])
   @@index([game, region])
+  @@index([isDeleted])
   @@map("tournaments")
 }
 
@@ -177,6 +176,8 @@ model Participant {
   @@unique([tournamentId, teamId])
   @@index([tournamentId, status])
   @@index([tournamentId, checkInStatus])
+  @@index([userId])
+  @@index([teamId])
   @@map("participants")
 }
 
@@ -222,6 +223,7 @@ model Team {
   tournament              Tournament               @relation("TournamentTeams", fields: [tournamentId], references: [id])
 
   @@index([tournamentId])
+  @@index([isDeleted])
   @@map("teams")
 }
 
@@ -296,6 +298,8 @@ model Match {
   tournament         Tournament     @relation(fields: [tournamentId], references: [id])
 
   @@index([tournamentId, status])
+  @@index([participant1Id])
+  @@index([participant2Id])
   @@map("matches")
 }
 
@@ -409,6 +413,7 @@ model MatchHistory {
   @@index([tournamentId])
   @@index([roundId])
   @@index([matchId])
+  @@index([opponentId])
   @@map("match_history")
 }
 
@@ -581,13 +586,13 @@ model Party {
 }
 
 model PartyMember {
-  id        String   @id @default(uuid())
+  id        String         @id @default(uuid())
   partyId   String
   userId    String
   role      TeamPlayerRole @default(MEMBER)
-  party     Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
-  user      User     @relation("PartyMemberships", fields: [userId], references: [id])
-  createdAt DateTime @default(now())
+  party     Party          @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user      User           @relation("PartyMemberships", fields: [userId], references: [id])
+  createdAt DateTime       @default(now())
 
   @@unique([partyId, userId])
   @@map("party_members")
@@ -606,4 +611,3 @@ model PartyInvite {
   @@unique([partyId, userId])
   @@map("party_invites")
 }
-

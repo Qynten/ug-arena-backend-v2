@@ -15,33 +15,33 @@ export class DisputeService {
             tournament: {
               include: {
                 staff: {
-                  where: { userId }
-                }
-              }
+                  where: { userId },
+                },
+              },
             },
             participant1: {
               include: {
                 user: true,
                 team: {
                   include: {
-                    players: { where: { playerId: userId } }
-                  }
-                }
-              }
+                    players: { where: { playerId: userId } },
+                  },
+                },
+              },
             },
             participant2: {
               include: {
                 user: true,
                 team: {
                   include: {
-                    players: { where: { playerId: userId } }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                    players: { where: { playerId: userId } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!dispute) {
@@ -51,7 +51,9 @@ export class DisputeService {
     const { match } = dispute;
     const { staff } = match.tournament;
 
-    const hasStaffAccess = staff.some(s => s.role === 'DRAFT_ADMIN' || s.role === 'DISPUTE_MANAGER');
+    const hasStaffAccess = staff.some(
+      (s) => s.role === 'DRAFT_ADMIN' || s.role === 'DISPUTE_MANAGER',
+    );
     if (hasStaffAccess) return true;
 
     // Check if user is part of participant1
@@ -68,13 +70,17 @@ export class DisputeService {
       if (p2.team && p2.team.players.length > 0) return true;
     }
 
-    // If the user happens to have global ADMIN/SUPER_ADMIN roles we could check that, 
+    // If the user happens to have global ADMIN/SUPER_ADMIN roles we could check that,
     // but schema says roles is on User model. Let's assume dispute rules apply locally first.
-    
+
     return false;
   }
 
-  async createDisputeMessage(disputeId: string, senderId: string, content: string): Promise<DisputeMessage> {
+  async createDisputeMessage(
+    disputeId: string,
+    senderId: string,
+    content: string,
+  ): Promise<DisputeMessage> {
     const hasAccess = await this.verifyUserCanAccessDispute(senderId, disputeId);
     if (!hasAccess) {
       throw new ForbiddenException('User does not have access to this dispute room');
@@ -93,9 +99,9 @@ export class DisputeService {
             discordName: true,
             displayName: true,
             photo: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
   }
 }

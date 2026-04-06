@@ -32,16 +32,15 @@ export class TournamentRoleGuard implements CanActivate {
 
     // Account for system-level ADMIN or SUPER_ADMIN roles
     const isSystemAdmin =
-      user.roles?.includes(UserRole.ADMIN) ||
-      user.roles?.includes(UserRole.SUPER_ADMIN);
+      user.roles?.includes(UserRole.ADMIN) || user.roles?.includes(UserRole.SUPER_ADMIN);
 
     if (isSystemAdmin) {
       return true;
     }
 
-    const tournamentId = 
-      request.params.id || 
-      request.params.tournamentId || 
+    const tournamentId =
+      request.params.id ||
+      request.params.tournamentId ||
       request.body.tournamentId ||
       request.query.tournamentId;
 
