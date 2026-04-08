@@ -247,6 +247,9 @@ export class TournamentService {
         where: whereClause,
         include: {
           prizePools: true,
+          _count: {
+            select: { participants: { where: { status: { not: ParticipantStatus.CANCELLED } } } },
+          },
           staff: {
             include: {
               user: {
@@ -282,7 +285,12 @@ export class TournamentService {
       this.prisma.tournament.findMany({
         where: { isDeleted: false },
         orderBy: { createdAt: 'desc' },
-        include: { prizePools: true },
+        include: { 
+          prizePools: true,
+          _count: {
+            select: { participants: { where: { status: { not: ParticipantStatus.CANCELLED } } } },
+          },
+        },
         skip,
         take: limit,
       }),
