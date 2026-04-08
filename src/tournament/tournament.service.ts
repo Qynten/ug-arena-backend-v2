@@ -20,6 +20,7 @@ import {
   CommonStatus,
   BracketType,
   MatchResult,
+  ParticipantStatus,
 } from '@prisma/client';
 
 @Injectable()
@@ -708,7 +709,6 @@ export class TournamentService {
         where: { tournamentId: tournament.id, isDeleted: false },
         include: {
           players: {
-            where: { role: TeamPlayerRole.CAPTAIN },
             include: {
               player: {
                 select: {
@@ -1344,6 +1344,47 @@ export class TournamentService {
     });
   }
 
+  async getAllDisputes(tournamentId: string, userId: string) {
+    const tournament = await this.prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { ownerId: true },
+    });
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    const isOwner = tournament.ownerId === userId;
+    const staff = await this.prisma.tournamentStaff.findFirst({
+      where: { tournamentId, userId }
+    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { roles: true }});
+    const isAdmin = user?.roles?.includes(UserRole.ADMIN) || user?.roles?.includes(UserRole.SUPER_ADMIN);
+
+    if (!isOwner && !staff && !isAdmin) {
+      throw new ForbiddenException('You do not have permission to view all disputes.');
+    }
+
+    return this.prisma.matchDispute.findMany({
+      where: { match: { tournamentId } },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        match: {
+          include: {
+            participant1: { include: { team: { select: { name: true } } } },
+            participant2: { include: { team: { select: { name: true } } } },
+            round: true
+          }
+        },
+        reportedBy: { select: { id: true, discordName: true, displayName: true, photo: true } },
+        resolvedBy: { select: { id: true, discordName: true, displayName: true } },
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
+          },
+        },
+      },
+    });
+  }
+
   async addDisputeMessage(disputeId: string, senderId: string, content: string) {
     const dispute = await this.prisma.matchDispute.findUnique({ where: { id: disputeId } });
     if (!dispute) throw new NotFoundException(`Dispute not found.`);
@@ -1710,6 +1751,45 @@ export class TournamentService {
     return membership ? { role: membership.role, team: membership.team } : null;
   }
 
+  async removeTeam(idOrSlug: string, teamId: string, requesterId: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+      select: { id: true, ownerId: true },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    const isOwner = tournament.ownerId === requesterId;
+    const staff = await this.prisma.tournamentStaff.findFirst({
+      where: { tournamentId: tournament.id, userId: requesterId }
+    });
+    const user = await this.prisma.user.findUnique({ where: { id: requesterId }, select: { roles: true }});
+    const isAdmin = user?.roles?.includes(UserRole.ADMIN) || user?.roles?.includes(UserRole.SUPER_ADMIN);
+
+    if (!isOwner && !staff && !isAdmin) {
+      throw new ForbiddenException('You do not have permission to remove a team.');
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      const participant = await prisma.participant.findFirst({
+        where: { tournamentId: tournament.id, teamId }
+      });
+      if (participant) {
+        await prisma.participant.update({
+          where: { id: participant.id },
+          data: { status: ParticipantStatus.CANCELLED }
+        });
+      }
+      return prisma.team.update({
+        where: { id: teamId },
+        data: { isDeleted: true }
+      });
+    });
+  }
+
   /**
    * Allows the team captain to remove an accepted member before the team
    * is submitted for the tournament.
@@ -1720,10 +1800,18 @@ export class TournamentService {
         isDeleted: false,
         OR: [{ id: idOrSlug }, { slug: idOrSlug }],
       },
-      select: { id: true },
+      select: { id: true, ownerId: true },
     });
 
     if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    const isOwner = tournament.ownerId === requesterId;
+    const staff = await this.prisma.tournamentStaff.findFirst({
+      where: { tournamentId: tournament.id, userId: requesterId }
+    });
+    const userRoleObj = await this.prisma.user.findUnique({ where: { id: requesterId }, select: { roles: true }});
+    const hasAdminRole = userRoleObj?.roles?.includes(UserRole.ADMIN) || userRoleObj?.roles?.includes(UserRole.SUPER_ADMIN);
+    const isAdmin = isOwner || staff || hasAdminRole;
 
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },
@@ -1737,23 +1825,20 @@ export class TournamentService {
       throw new NotFoundException('Team not found.');
     }
 
-    // Only the captain can remove members
     const captainRecord = team.players.find(
       (p) => p.playerId === requesterId && p.role === TeamPlayerRole.CAPTAIN,
     );
-    if (!captainRecord) {
-      throw new ForbiddenException('Only the team captain can remove members.');
+    if (!captainRecord && !isAdmin) {
+      throw new ForbiddenException('Only the team captain or an admin can remove members.');
     }
 
-    // Cannot modify roster after team has been submitted
-    if (team.participants.length > 0) {
+    if (team.participants.length > 0 && !isAdmin) {
       throw new BadRequestException(
         'The team has already been submitted for the tournament. The roster cannot be modified.',
       );
     }
 
-    // Cannot remove yourself (use team deletion instead)
-    if (memberId === requesterId) {
+    if (memberId === requesterId && !isAdmin) {
       throw new BadRequestException(
         'The captain cannot remove themselves. Delete the team instead.',
       );
@@ -1764,14 +1849,21 @@ export class TournamentService {
       throw new NotFoundException('This player is not a member of the team.');
     }
 
-    // Delete TeamPlayer and any lingering TeamPlayerRegistration records atomically
     return this.prisma.$transaction(async (prisma) => {
       await prisma.teamPlayer.delete({ where: { id: memberRecord.id } });
 
-      // Clean up any invite records (ACCEPTED, REJECTED, or PENDING) for this player on this team
       await prisma.teamPlayerRegistration.deleteMany({
         where: { teamId, playerId: memberId },
       });
+
+      if (team.participants.length > 0) {
+        await prisma.tournamentRoster.deleteMany({
+          where: {
+            participant: { teamId },
+            userId: memberId
+          }
+        });
+      }
 
       return { message: `Player removed from team successfully.` };
     });

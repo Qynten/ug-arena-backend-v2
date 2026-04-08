@@ -172,6 +172,16 @@ export class TournamentController {
     return this.tournamentService.getTeam(id, teamId);
   }
 
+  @Delete(':id/teams/:teamId')
+  @UseGuards(JwtAuthGuard)
+  removeTeam(
+    @Param('id') id: string,
+    @Param('teamId') teamId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.removeTeam(id, teamId, userId);
+  }
+
   @Delete(':id/teams/:teamId/members/:memberId')
   @UseGuards(JwtAuthGuard)
   removeTeamMember(
@@ -288,6 +298,12 @@ export class TournamentController {
   @Get(':id/matches/:matchId/disputes')
   getDisputeByMatch(@Param('matchId') matchId: string) {
     return this.tournamentService.getDisputeByMatch(matchId);
+  }
+
+  @Get(':id/disputes')
+  @UseGuards(JwtAuthGuard)
+  getAllDisputes(@Param('id') id: string, @GetUser('id') userId: string) {
+    return this.tournamentService.getAllDisputes(id, userId);
   }
 
   @Post('disputes/:disputeId/messages')
