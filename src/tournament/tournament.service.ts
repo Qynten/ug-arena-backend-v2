@@ -630,6 +630,7 @@ export class TournamentService {
       where: {
         tournamentId: tournament.id,
         userId: userId,
+        status: { not: ParticipantStatus.CANCELLED },
       },
     });
 
@@ -660,6 +661,14 @@ export class TournamentService {
               role: TeamPlayerRole.CAPTAIN,
             },
           },
+        },
+      });
+
+      await prisma.participant.deleteMany({
+        where: {
+          tournamentId: tournament.id,
+          userId: userId,
+          status: ParticipantStatus.CANCELLED,
         },
       });
 
@@ -1494,7 +1503,11 @@ export class TournamentService {
       );
 
     const existingParticipant = await this.prisma.participant.findFirst({
-      where: { tournamentId: tournament.id, userId: { in: memberIds } },
+      where: { 
+        tournamentId: tournament.id, 
+        userId: { in: memberIds },
+        status: { not: ParticipantStatus.CANCELLED },
+      },
     });
     if (existingParticipant)
       throw new BadRequestException(
@@ -1515,6 +1528,14 @@ export class TournamentService {
           },
         },
         include: { players: true },
+      });
+
+      await prisma.participant.deleteMany({
+        where: {
+          tournamentId: tournament.id,
+          userId,
+          status: ParticipantStatus.CANCELLED,
+        },
       });
 
       const participant = await prisma.participant.create({
@@ -1573,7 +1594,11 @@ export class TournamentService {
       throw new BadRequestException('You are already part of a team in this tournament.');
 
     const existingParticipant = await this.prisma.participant.findFirst({
-      where: { tournamentId: tournament.id, userId },
+      where: { 
+        tournamentId: tournament.id, 
+        userId,
+        status: { not: ParticipantStatus.CANCELLED },
+      },
     });
     if (existingParticipant)
       throw new BadRequestException('You are already registered for this tournament.');
