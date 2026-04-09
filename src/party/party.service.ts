@@ -120,7 +120,7 @@ export class PartyService {
 
   async getPartyInvites(userId: string) {
     return this.prisma.partyInvite.findMany({
-      where: { userId },
+      where: { userId, status: CommonStatus.PENDING },
       include: {
         party: {
           include: {
