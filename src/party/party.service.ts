@@ -46,29 +46,34 @@ export class PartyService {
   }
 
   async getMyParty(userId: string) {
-    const membership = await this.prisma.partyMember.findFirst({
-      where: { userId },
-      include: {
-        party: {
-          include: {
-            members: {
-              include: {
-                user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+    try {
+      const membership = await this.prisma.partyMember.findFirst({
+        where: { userId },
+        include: {
+          party: {
+            include: {
+              members: {
+                include: {
+                  user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+                },
               },
-            },
-            invites: {
-              where: { status: CommonStatus.PENDING },
-              include: {
-                user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+              invites: {
+                where: { status: 'PENDING' },
+                include: {
+                  user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+                },
+                orderBy: { createdAt: 'desc' },
               },
-              orderBy: { createdAt: 'desc' },
             },
           },
         },
-      },
-    });
+      });
 
-    return membership ? membership.party : null;
+      return membership ? membership.party : null;
+    } catch (error) {
+      console.error('[PartyService.getMyParty] error:', error);
+      throw error;
+    }
   }
 
   async invitePlayer(partyId: string, userId: string, dto: InvitePlayerDto) {
