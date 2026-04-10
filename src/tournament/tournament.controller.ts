@@ -12,9 +12,9 @@ import {
   Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { TournamentService } from './tournament.service';
+import { MediaService } from '../media/media.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
@@ -35,30 +35,23 @@ import { GetUser } from '../common/decorators/get-user.decorator';
 
 @Controller('tournaments')
 export class TournamentController {
-  constructor(private readonly tournamentService: TournamentService) {}
+  constructor(
+    private readonly tournamentService: TournamentService,
+    private readonly mediaService: MediaService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(
-    FileInterceptor('image', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (req, file, callback) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const ext = extname(file.originalname);
-          callback(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-        },
-      }),
-    }),
-  )
+  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
   // REMOVED the @Roles decorator here so any logged-in user can create!
-  create(
+  async create(
     @Body() createTournamentDto: CreateTournamentDto,
     @GetUser('id') userId: string,
-    @UploadedFile() file?: any,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     if (file) {
-      createTournamentDto.imageUrl = `/uploads/${file.filename}`;
+      const media = await this.mediaService.create(file);
+      createTournamentDto.imageId = media.id;
     }
     return this.tournamentService.create(createTournamentDto, userId);
   }
@@ -247,11 +240,17 @@ export class TournamentController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(
+  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
+  async update(
     @Param('id') id: string,
     @Body() updateTournamentDto: UpdateTournamentDto,
     @GetUser() user: any,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
+    if (file) {
+      const media = await this.mediaService.create(file);
+      updateTournamentDto.imageId = media.id;
+    }
     return this.tournamentService.update(id, updateTournamentDto, user);
   }
 

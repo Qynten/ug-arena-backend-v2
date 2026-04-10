@@ -95,11 +95,28 @@ export class UsersService {
   async findByIdWithExclude(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
+      include: { photoMedia: true },
     });
     if (user) {
       const { password, refreshTokenHash, ...result } = user;
       return result;
     }
     return null;
+  }
+
+  async updatePhoto(userId: string, mediaId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { photoId: mediaId },
+      include: { photoMedia: true },
+    });
+  }
+
+  async revertPhotoToDiscord(userId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { photoId: null },
+      include: { photoMedia: true },
+    });
   }
 }

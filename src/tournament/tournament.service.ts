@@ -96,6 +96,9 @@ export class TournamentService {
           ? new Date(createTournamentDto.startTime)
           : undefined,
         imageUrl: createTournamentDto.imageUrl,
+        imageMedia: createTournamentDto.imageId
+          ? { connect: { id: createTournamentDto.imageId } }
+          : undefined,
         regStart: createTournamentDto.regStart,
         regEnd: createTournamentDto.regEnd,
         seedingStart: createTournamentDto.seedingStart,
@@ -334,7 +337,7 @@ export class TournamentService {
   async update(id: string, updateTournamentDto: UpdateTournamentDto, user: any) {
     await this.checkOwnership(id, user);
 
-    const { prizePools, ...rest } = updateTournamentDto;
+    const { prizePools, imageId, ...rest } = updateTournamentDto;
 
     // Build the prize pool update logic
     const prizePoolUpdate = prizePools
@@ -370,6 +373,9 @@ export class TournamentService {
         where: { id },
         data: {
           ...rest,
+          imageMedia: imageId
+            ? { connect: { id: imageId } }
+            : undefined,
           ...(prizePoolUpdate && {
             prizePools: prizePoolUpdate,
           }),

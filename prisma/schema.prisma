@@ -14,6 +14,8 @@ model User {
   password         String?
   refreshTokenHash String?
   photo            String?
+  photoId          String?
+  photoMedia       Media?            @relation("UserPhoto", fields: [photoId], references: [id])
   contactNO        String?
   location         String?
   status           UserStatus        @default(ACTIVE)
@@ -71,6 +73,8 @@ model Tournament {
   region          String               @default("Global")
   startTime       DateTime             @default(now())
   imageUrl        String?
+  imageId         String?
+  imageMedia      Media?               @relation("TournamentBanner", fields: [imageId], references: [id])
   type            TournamentType       @default(TEAM)
   bracketType     BracketType          @default(SINGLE_ELIMINATION)
   status          TournamentStatus     @default(DRAFT)
@@ -609,4 +613,16 @@ model PartyInvite {
 
   @@unique([partyId, userId])
   @@map("party_invites")
+}
+model Media {
+  id        String   @id @default(uuid())
+  content   Bytes
+  mimeType  String
+  fileName  String?
+  createdAt DateTime @default(now())
+
+  tournaments Tournament[] @relation("TournamentBanner")
+  users       User[]       @relation("UserPhoto")
+
+  @@map("media")
 }

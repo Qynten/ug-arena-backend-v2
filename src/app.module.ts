@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PartyModule } from './party/party.module';
 import { DisputeModule } from './dispute/dispute.module';
+import { MediaModule } from './media/media.module';
 import { RolesGuard } from './common/guards/roles.guard';
 
 @Module({
@@ -20,6 +21,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     NotificationsModule,
     PartyModule,
     DisputeModule,
+    MediaModule,
   ],
   controllers: [],
   providers: [

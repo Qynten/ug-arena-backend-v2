@@ -109,6 +109,10 @@ export class UpdateTournamentDto {
   @IsOptional()
   imageUrl?: string;
 
+  @IsUUID()
+  @IsOptional()
+  imageId?: string;
+
   // --- Prize Pools ---
   @IsArray()
   @ValidateNested({ each: true })
