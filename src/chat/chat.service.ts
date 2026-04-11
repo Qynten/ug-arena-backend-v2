@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ChatMessageType, TournamentRoleType } from '@prisma/client';
+import { ChatMessageType, TournamentRoleType, NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const SENDER_SELECT = {
@@ -21,7 +21,10 @@ const NOTIFIABLE_ROLES: TournamentRoleType[] = [
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   /**
    * Returns { canAccess: true, canWrite: bool }
@@ -142,7 +145,7 @@ export class ChatService {
     await this.notificationsService.createMany(
       userIds.map((userId) => ({
         userId,
-        type: 'ADMIN_CALL',
+        type: NotificationType.ADMIN_CALL,
         title: `Admin Call: ${issueType}`,
         message: `${senderName} needs admin assistance in "${tournament.name}": ${issueType}`,
         payload: { tournamentId, messageId, issueType },
