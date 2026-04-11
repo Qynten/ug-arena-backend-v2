@@ -9,16 +9,22 @@ import {
   IsDateString,
   IsUUID,
   IsEnum,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreatePrizePoolDto } from './create-tournament.dto';
-import { BracketType } from '@prisma/client';
+import { BracketType, TournamentStatus } from '@prisma/client';
 
 export class UpdateTournamentDto {
   // --- Core identity ---
   @IsString()
   @IsOptional()
   name?: string;
+
+  // --- Status override (for admin revert/cancel) ---
+  @IsEnum(TournamentStatus)
+  @IsOptional()
+  status?: TournamentStatus;
 
   @IsString()
   @IsOptional()
@@ -99,6 +105,12 @@ export class UpdateTournamentDto {
   @IsOptional()
   maxTeamSize?: number;
 
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  minTeamSize?: number;
+
   // --- Bracket ---
   @IsEnum(BracketType)
   @IsOptional()
@@ -119,4 +131,8 @@ export class UpdateTournamentDto {
   @Type(() => CreatePrizePoolDto)
   @IsOptional()
   prizePools?: CreatePrizePoolDto[];
+
+  @IsBoolean()
+  @IsOptional()
+  allowSubstitutions?: boolean;
 }

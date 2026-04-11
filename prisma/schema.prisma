@@ -1,5 +1,5 @@
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -65,51 +65,52 @@ model UserAccount {
 }
 
 model Tournament {
-  id              String               @id @default(uuid())
-  slug            String               @unique @default(uuid())
-  name            String
-  description     String?
-  game            String               @default("Chess")
-  region          String               @default("Global")
-  startTime       DateTime             @default(now())
-  imageUrl        String?
-  imageId         String?
-  imageMedia      Media?               @relation("TournamentBanner", fields: [imageId], references: [id])
-  type            TournamentType       @default(TEAM)
-  bracketType     BracketType          @default(SINGLE_ELIMINATION)
-  status          TournamentStatus     @default(DRAFT)
-  regStart        DateTime?
-  regEnd          DateTime?
-  seedingStart    DateTime?
-  seedingEnd      DateTime?
-  liveStart       DateTime?
-  liveEnd         DateTime?
-  checkInStart    DateTime?
-  checkInEnd      DateTime?
-  maxParticipants Int
-  minTeamSize     Int                  @default(1)
-  maxTeamSize     Int                  @default(5)
-  bestOf          Int                  @default(1)
-  allowDraws      Boolean              @default(false)
-  logo            String?
-  metadata        Json?                @default("{}")
-  rules           String?
-  requirements    String?
-  isDeleted       Boolean              @default(false)
-  ownerId         String
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  auditLogs       AuditLog[]
-  matchHistories  MatchHistory[]
-  matches         Match[]
-  participants    Participant[]        @relation("TournamentParticipants")
-  prizePools      PrizePool[]
-  rounds          Round[]              @relation("TournamentRounds")
-  scores          score[]              @relation("TournamentScores")
-  teams           Team[]               @relation("TournamentTeams")
-  activities      TournamentActivity[]
-  staff           TournamentStaff[]
-  owner           User                 @relation("TournamentOwner", fields: [ownerId], references: [id])
+  id                 String               @id @default(uuid())
+  slug               String               @unique @default(uuid())
+  name               String
+  description        String?
+  game               String               @default("Chess")
+  region             String               @default("Global")
+  startTime          DateTime             @default(now())
+  imageUrl           String?
+  imageId            String?
+  imageMedia         Media?               @relation("TournamentBanner", fields: [imageId], references: [id])
+  type               TournamentType       @default(TEAM)
+  bracketType        BracketType          @default(SINGLE_ELIMINATION)
+  status             TournamentStatus     @default(DRAFT)
+  regStart           DateTime?
+  regEnd             DateTime?
+  seedingStart       DateTime?
+  seedingEnd         DateTime?
+  liveStart          DateTime?
+  liveEnd            DateTime?
+  checkInStart       DateTime?
+  checkInEnd         DateTime?
+  maxParticipants    Int
+  minTeamSize        Int                  @default(1)
+  maxTeamSize        Int                  @default(5)
+  bestOf             Int                  @default(1)
+  allowDraws         Boolean              @default(false)
+  allowSubstitutions Boolean              @default(false)
+  logo               String?
+  metadata           Json?                @default("{}")
+  rules              String?
+  requirements       String?
+  isDeleted          Boolean              @default(false)
+  ownerId            String
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  auditLogs          AuditLog[]
+  matchHistories     MatchHistory[]
+  matches            Match[]
+  participants       Participant[]        @relation("TournamentParticipants")
+  prizePools         PrizePool[]
+  rounds             Round[]              @relation("TournamentRounds")
+  scores             score[]              @relation("TournamentScores")
+  teams              Team[]               @relation("TournamentTeams")
+  activities         TournamentActivity[]
+  staff              TournamentStaff[]
+  owner              User                 @relation("TournamentOwner", fields: [ownerId], references: [id])
 
   @@index([ownerId])
   @@index([status])
@@ -614,6 +615,7 @@ model PartyInvite {
   @@unique([partyId, userId])
   @@map("party_invites")
 }
+
 model Media {
   id        String   @id @default(uuid())
   content   Bytes

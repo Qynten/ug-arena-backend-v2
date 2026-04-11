@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  UnauthorizedException,
   Logger,
 } from '@nestjs/common';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
@@ -86,50 +87,61 @@ export class TournamentService {
   async create(createTournamentDto: CreateTournamentDto, ownerId: string) {
     const slug = await this.generateUniqueSlug(createTournamentDto.name);
 
-    return this.prisma.tournament.create({
-      data: {
-        slug,
-        name: createTournamentDto.name,
-        game: createTournamentDto.game,
-        region: createTournamentDto.region,
-        startTime: createTournamentDto.startTime
-          ? new Date(createTournamentDto.startTime)
-          : undefined,
-        imageUrl: createTournamentDto.imageUrl,
-        imageMedia: createTournamentDto.imageId
-          ? { connect: { id: createTournamentDto.imageId } }
-          : undefined,
-        regStart: createTournamentDto.regStart,
-        regEnd: createTournamentDto.regEnd,
-        seedingStart: createTournamentDto.seedingStart,
-        seedingEnd: createTournamentDto.seedingEnd,
-        liveStart: createTournamentDto.liveStart,
-        liveEnd: createTournamentDto.liveEnd,
-        checkInStart: createTournamentDto.checkInStart,
-        checkInEnd: createTournamentDto.checkInEnd,
-        maxParticipants: createTournamentDto.maxParticipants,
-        maxTeamSize: createTournamentDto.maxTeamSize,
-        bracketType: createTournamentDto.bracketType,
+    try {
+      return await this.prisma.tournament.create({
+        data: {
+          slug,
+          name: createTournamentDto.name,
+          game: createTournamentDto.game,
+          region: createTournamentDto.region,
+          startTime: createTournamentDto.startTime
+            ? new Date(createTournamentDto.startTime)
+            : undefined,
+          imageUrl: createTournamentDto.imageUrl,
+          imageMedia: createTournamentDto.imageId
+            ? { connect: { id: createTournamentDto.imageId } }
+            : undefined,
+          regStart: createTournamentDto.regStart,
+          regEnd: createTournamentDto.regEnd,
+          seedingStart: createTournamentDto.seedingStart,
+          seedingEnd: createTournamentDto.seedingEnd,
+          liveStart: createTournamentDto.liveStart,
+          liveEnd: createTournamentDto.liveEnd,
+          checkInStart: createTournamentDto.checkInStart,
+          checkInEnd: createTournamentDto.checkInEnd,
+          maxParticipants: createTournamentDto.maxParticipants,
+          maxTeamSize: createTournamentDto.maxTeamSize,
+          minTeamSize: createTournamentDto.minTeamSize,
+          bracketType: createTournamentDto.bracketType,
 
-        owner: {
-          connect: { id: ownerId },
+          owner: {
+            connect: { id: ownerId },
+          },
+
+          // Dynamically map the array of prize pools from the request
+          prizePools: createTournamentDto.prizePools
+            ? {
+                create: createTournamentDto.prizePools.map((pool) => ({
+                  position: pool.position as any,
+                  amount: pool.amount,
+                })),
+              }
+            : undefined,
         },
-
-        // Dynamically map the array of prize pools from the request
-        prizePools: createTournamentDto.prizePools
-          ? {
-              create: createTournamentDto.prizePools.map((pool) => ({
-                position: pool.position as any,
-                amount: pool.amount,
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        owner: true,
-        prizePools: true,
-      },
-    });
+        include: {
+          owner: true,
+          prizePools: true,
+        },
+      });
+    } catch (error: any) {
+      this.logger.error(`Failed to create tournament: ${error.message}`);
+      if (error.code === 'P2025') {
+        throw new UnauthorizedException(
+          'Your user session is invalid or your account record is missing. Please log out and log back in.',
+        );
+      }
+      throw new BadRequestException(error.message || 'Failed to create tournament.');
+    }
   }
 
   async assignStaff(
@@ -384,9 +396,12 @@ export class TournamentService {
           prizePools: true,
         },
       });
-    } catch (error) {
-      // If Prisma can't find the UUID to update, throw our clean 404
-      throw new NotFoundException(`Cannot update. Tournament with ID ${id} not found.`);
+    } catch (error: any) {
+      this.logger.error(`Failed to update tournament ${id}:`, error?.message ?? error);
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Cannot update. Tournament with ID ${id} not found.`);
+      }
+      throw new BadRequestException(error?.message ?? 'Failed to update tournament.');
     }
   }
 

@@ -10,8 +10,9 @@ import {
   IsDate,
   IsDateString,
   IsEnum,
+  IsBoolean,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { BracketType } from '@prisma/client';
 
 // 1. Define what a single Prize Pool must look like
@@ -65,6 +66,12 @@ export class CreateTournamentDto {
   @IsNumber()
   @Min(1)
   maxTeamSize!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  minTeamSize?: number;
 
   @IsEnum(BracketType)
   @IsOptional()
@@ -120,4 +127,9 @@ export class CreateTournamentDto {
   @Type(() => CreatePrizePoolDto)
   @IsOptional() // Making it optional in case an event has no prize money
   prizePools?: CreatePrizePoolDto[];
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  allowSubstitutions?: boolean;
 }
