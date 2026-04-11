@@ -24,12 +24,17 @@ import {
   ParticipantStatus,
 } from '@prisma/client';
 
+import { NotificationsService } from '../notifications/notifications.service';
+
 @Injectable()
 export class TournamentService {
   private readonly logger = new Logger(TournamentService.name);
 
   // 1. Inject the Prisma Service so we can talk to the database
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   private async checkOwnership(tournamentId: string, user: any) {
     const tournament = await this.prisma.tournament.findUnique({
@@ -851,14 +856,12 @@ export class TournamentService {
         },
       });
 
-      await prisma.notification.create({
-        data: {
-          userId: invitee.id,
-          type: NotificationType.TEAM_INVITE,
-          title: 'Team Invite',
-          message: `${captainName} invited you to join team "${team.name}" in ${team.tournament.name}.`,
-          payload: { teamId, registrationId: registration.id, tournamentId: team.tournament.id },
-        },
+      await this.notificationsService.create({
+        userId: invitee.id,
+        type: NotificationType.TEAM_INVITE,
+        title: 'New Team Invite',
+        message: `You have been invited to join the team "${team.name}" for tournament "${team.tournament.name}".`,
+        payload: { teamId: team.id, tournamentId: team.tournament.id },
       });
 
       return registration;

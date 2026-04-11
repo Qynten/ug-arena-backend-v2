@@ -8,10 +8,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePartyDto } from './dto/create-party.dto';
 import { InvitePlayerDto } from './dto/invite-player.dto';
 import { TeamPlayerRole, CommonStatus, NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PartyService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async createParty(userId: string, dto: CreatePartyDto) {
     const existingParty = await this.prisma.partyMember.findFirst({
@@ -110,14 +114,12 @@ export class PartyService {
       },
     });
 
-    await this.prisma.notification.create({
-      data: {
-        userId: targetUser.id,
-        type: NotificationType.PARTY_INVITE,
-        title: 'New Party Invite',
-        message: `You have been invited to join the party "${party.name}".`,
-        payload: { partyId: party.id },
-      },
+    await this.notificationsService.create({
+      userId: targetUser.id,
+      type: NotificationType.PARTY_INVITE,
+      title: 'New Party Invite',
+      message: `You have been invited to join the party "${party.name}".`,
+      payload: { partyId: party.id },
     });
 
     return invite;

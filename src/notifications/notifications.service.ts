@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private gateway: NotificationsGateway,
+  ) {}
 
   async getMyNotifications(userId: string, pageStr?: string, limitStr?: string) {
     const page = parseInt(pageStr || '1', 10);
@@ -28,6 +33,38 @@ export class NotificationsService {
       where: { userId, isRead: false },
     });
     return { count };
+  }
+
+  /**
+   * Centralized method to create a notification and emit real-time event
+   */
+  async create(data: { userId: string; type: string; title: string; message: string; payload?: any }) {
+    const notification = await this.prisma.notification.create({
+      data: {
+        userId: data.userId,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        payload: data.payload || {},
+      },
+    });
+
+    // Emit real-time event to user's private room
+    this.gateway.emitToUser(data.userId, notification);
+
+    return notification;
+  }
+
+  /**
+   * Centralized method to create multiple notifications and emit real-time events
+   */
+  async createMany(notificationsData: Array<{ userId: string; type: string; title: string; message: string; payload?: any }>) {
+    // Prisma createMany doesn't return the created objects with IDs on all DBs,
+    // so we iterate or perform a fetch. For simplicity and reliability in emissions:
+    const created = await Promise.all(
+      notificationsData.map(d => this.create(d))
+    );
+    return created;
   }
 
   async markRead(notificationId: string, userId: string) {

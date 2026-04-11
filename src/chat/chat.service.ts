@@ -1,6 +1,7 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatMessageType, TournamentRoleType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const SENDER_SELECT = {
   id: true,
@@ -138,16 +139,15 @@ export class ChatService {
 
     if (userIds.length === 0) return;
 
-    await this.prisma.notification.createMany({
-      data: userIds.map((userId) => ({
+    await this.notificationsService.createMany(
+      userIds.map((userId) => ({
         userId,
-        type: 'ADMIN_CALL' as any,
+        type: 'ADMIN_CALL',
         title: `Admin Call: ${issueType}`,
         message: `${senderName} needs admin assistance in "${tournament.name}": ${issueType}`,
         payload: { tournamentId, messageId, issueType },
       })),
-      skipDuplicates: true,
-    });
+    );
   }
 
   /**

@@ -4,9 +4,10 @@ import { TournamentController } from './tournament.controller';
 import { TournamentRoleGuard } from '../common/guards/tournament-role.guard';
 import { MediaModule } from '../media/media.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, MediaModule],
+  imports: [PrismaModule, MediaModule, NotificationsModule],
   controllers: [TournamentController],
   providers: [TournamentService, TournamentRoleGuard],
 })
