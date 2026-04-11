@@ -41,6 +41,9 @@ model User {
   partyMemberships PartyMember[] @relation("PartyMemberships")
   partyInvites     PartyInvite[] @relation("PartyInvites")
 
+  chatMessagesSent    TournamentChatMessage[] @relation("ChatMessageSender")
+  chatMessagesDeleted TournamentChatMessage[] @relation("ChatMessageDeleter")
+
   @@index([status])
   @@index([isBlocked])
   @@map("users")
@@ -111,6 +114,7 @@ model Tournament {
   activities         TournamentActivity[]
   staff              TournamentStaff[]
   owner              User                 @relation("TournamentOwner", fields: [ownerId], references: [id])
+  chatMessages       TournamentChatMessage[]
 
   @@index([ownerId])
   @@index([status])
@@ -574,6 +578,13 @@ enum NotificationType {
   TEAM_INVITE
   TOURNAMENT_UPDATE
   PARTY_INVITE
+  ADMIN_CALL
+}
+
+enum ChatMessageType {
+  NORMAL
+  ADMIN_CALL
+  SYSTEM
 }
 
 model Party {
@@ -627,4 +638,22 @@ model Media {
   users       User[]       @relation("UserPhoto")
 
   @@map("media")
+}
+
+model TournamentChatMessage {
+  id           String          @id @default(uuid())
+  tournamentId String
+  senderId     String
+  content      String
+  type         ChatMessageType @default(NORMAL)
+  issueType    String?
+  isDeleted    Boolean         @default(false)
+  deletedById  String?
+  createdAt    DateTime        @default(now())
+  tournament   Tournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  sender       User            @relation("ChatMessageSender", fields: [senderId], references: [id])
+  deletedBy    User?           @relation("ChatMessageDeleter", fields: [deletedById], references: [id])
+
+  @@index([tournamentId, createdAt])
+  @@map("tournament_chat_messages")
 }

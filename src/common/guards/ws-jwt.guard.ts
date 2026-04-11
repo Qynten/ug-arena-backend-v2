@@ -12,7 +12,7 @@ export class WsJwtGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client: Socket = context.switchToWs().getClient();
-    const token = this.extractTokenFromHeader(client);
+    const token = this.extractToken(client);
 
     if (!token) {
       throw new UnauthorizedException('Authentication token missing');
@@ -36,10 +36,20 @@ export class WsJwtGuard implements CanActivate {
     }
   }
 
-  private extractTokenFromHeader(client: Socket): string | undefined {
+  /**
+   * Browsers cannot send custom HTTP headers over a native WebSocket connection.
+   * Socket.io v4's `auth` object is sent as part of the socket.io handshake payload
+   * and works in all transports. We check it first, then fall back to the
+   * Authorization header (works when HTTP polling is used).
+   */
+  private extractToken(client: Socket): string | undefined {
+    // 1. socket.io v4 auth object — browser-compatible, preferred approach
+    const authToken = (client.handshake.auth as any)?.token;
+    if (authToken) return authToken;
+
+    // 2. Authorization header fallback — works with HTTP polling transport
     const authorization = client.handshake.headers.authorization;
     if (!authorization) return undefined;
-
     const [type, token] = authorization.split(' ') ?? [];
     return type === 'Bearer' ? token : undefined;
   }
