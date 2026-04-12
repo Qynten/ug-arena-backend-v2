@@ -305,6 +305,7 @@ model Match {
   p1CheckInAt        DateTime?
   p2CheckInAt        DateTime?
   matchReadyAt       DateTime?
+  unlockedAt         DateTime?
   disputes           MatchDispute[]
   messages           MatchMessage[]
   matchHistories     MatchHistory[]
