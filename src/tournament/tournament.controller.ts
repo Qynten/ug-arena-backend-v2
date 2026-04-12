@@ -133,6 +133,24 @@ export class TournamentController {
     return this.tournamentService.joinWithParty(id, userId);
   }
 
+  @Post(':id/create-open-team-with-party')
+  @UseGuards(JwtAuthGuard)
+  createOpenTeamWithParty(@Param('id') id: string, @GetUser('id') userId: string) {
+    return this.tournamentService.createOpenTeamWithParty(id, userId);
+  }
+
+  @Post(':id/join-solo')
+  @UseGuards(JwtAuthGuard)
+  joinSolo(@Param('id') id: string, @GetUser('id') userId: string) {
+    return this.tournamentService.joinSolo(id, userId);
+  }
+
+  @Get(':id/solo-queue')
+  @UseGuards(JwtAuthGuard)
+  getSoloQueue(@Param('id') id: string) {
+    return this.tournamentService.getSoloQueue(id);
+  }
+
   @Post(':id/create-team')
   @UseGuards(JwtAuthGuard)
   createCustomTeam(

@@ -22,6 +22,7 @@ import {
   BracketType,
   MatchResult,
   ParticipantStatus,
+  TournamentType,
 } from '@prisma/client';
 
 import { NotificationsService } from '../notifications/notifications.service';
@@ -927,16 +928,18 @@ export class TournamentService {
   }
 
   async generateBracket(idOrSlug: string, userId: string) {
-    const tournament = await this.prisma.tournament.findFirst({
+    const fetchedTournament = await this.prisma.tournament.findFirst({
       where: {
         isDeleted: false,
         OR: [{ id: idOrSlug }, { slug: idOrSlug }],
       },
     });
 
-    if (!tournament) {
+    if (!fetchedTournament) {
       throw new NotFoundException(`Tournament not found.`);
     }
+
+    const tournament = fetchedTournament!;
 
     if (tournament.ownerId !== userId) {
       throw new ForbiddenException('Only the tournament owner can generate the bracket.');
@@ -948,10 +951,121 @@ export class TournamentService {
       );
     }
 
+    return this.prisma.$transaction(async (prisma) => {
+      // --- SEEDING PRE-FLIGHT: SOLO QUEUE AUTO-FILL ---
+      if (tournament.type === TournamentType.TEAM) {
+        const solos = await prisma.participant.findMany({
+          where: { tournamentId: tournament.id, teamId: null, status: ParticipantStatus.REGISTERED },
+          include: { user: true }
+        });
+
+        if (solos.length > 0) {
+          const registeredParticipants = await prisma.participant.findMany({
+            where: { tournamentId: tournament.id, status: ParticipantStatus.REGISTERED, teamId: { not: null } }
+          });
+          const registeredTeamIds = registeredParticipants.map(p => p.teamId!).filter(Boolean);
+
+          const openTeams = await prisma.team.findMany({
+            where: { tournamentId: tournament.id, isDeleted: false, id: { notIn: registeredTeamIds } },
+            include: { players: true }
+          });
+
+          // 1. Fill existing open teams
+          for (const team of openTeams) {
+            let currentSize = team.players.length;
+            while (currentSize < tournament.maxTeamSize && solos.length > 0) {
+              const soloParticipant = solos.shift()!;
+              await prisma.teamPlayer.create({
+                data: { teamId: team.id, playerId: soloParticipant.userId!, role: TeamPlayerRole.MEMBER }
+              });
+              await prisma.participant.delete({ where: { id: soloParticipant.id } }); // Remove solo participant record
+              currentSize++;
+            }
+            if (currentSize >= tournament.minTeamSize) {
+              const newPlayers = await prisma.teamPlayer.findMany({ where: { teamId: team.id }});
+              await prisma.participant.create({
+                data: {
+                  tournamentId: tournament.id,
+                  userId: newPlayers.find(p => p.role === TeamPlayerRole.CAPTAIN)?.playerId || newPlayers[0].playerId,
+                  teamId: team.id,
+                  rosters: {
+                    create: newPlayers.map(p => ({
+                      userId: p.playerId,
+                      role: p.role
+                    }))
+                  }
+                }
+              });
+            }
+          }
+
+          // 2. Form new randomized teams from remaining solos
+          const currentTotalTeamsCount = await prisma.participant.count({
+            where: { tournamentId: tournament.id, status: ParticipantStatus.REGISTERED, teamId: { not: null } }
+          });
+          
+          let teamsToCreate = 0;
+          if (solos.length > 0) {
+             const spotsAvailable = tournament.maxParticipants - currentTotalTeamsCount;
+             const possibleTeams = Math.floor(solos.length / tournament.minTeamSize);
+             teamsToCreate = Math.min(spotsAvailable, possibleTeams);
+          }
+
+          for (let i = 0; i < teamsToCreate; i++) {
+            const size = Math.min(solos.length - (teamsToCreate - 1 - i) * tournament.minTeamSize, tournament.maxTeamSize);
+            const teamSolos = solos.splice(0, size);
+            
+            const randomTeamName = `Arena Squad ${Math.floor(Math.random() * 10000)}`;
+            const newTeam = await prisma.team.create({
+              data: {
+                name: randomTeamName,
+                tournamentId: tournament.id,
+                players: {
+                  create: teamSolos.map((s, idx) => ({
+                    playerId: s.userId!,
+                    role: idx === 0 ? TeamPlayerRole.CAPTAIN : TeamPlayerRole.MEMBER
+                  }))
+                }
+              },
+              include: { players: true }
+            });
+
+            await prisma.participant.create({
+              data: {
+                tournamentId: tournament.id,
+                userId: newTeam.players[0].playerId,
+                teamId: newTeam.id,
+                rosters: {
+                  create: newTeam.players.map(p => ({
+                    userId: p.playerId,
+                    role: p.role
+                  }))
+                }
+              }
+            });
+
+            for (const s of teamSolos) {
+              await prisma.participant.delete({ where: { id: s.id } });
+            }
+          }
+
+          // 3. Any solos STILL remaining are cancelled.
+          for (const s of solos) {
+            await prisma.participant.update({
+              where: { id: s.id },
+              data: { status: ParticipantStatus.CANCELLED }
+            });
+          }
+        }
+      }
+    }); // End of Pre-Flight Transaction
+
+    // Fetch the final list of valid participants for bracket generation
     const participants = await this.prisma.participant.findMany({
       where: {
         tournamentId: tournament.id,
         status: 'REGISTERED',
+        ...(tournament.type === TournamentType.TEAM ? { teamId: { not: null } } : {})
       },
     });
 
@@ -1651,6 +1765,169 @@ export class TournamentService {
         },
       });
       return participant;
+    });
+  }
+
+  async createOpenTeamWithParty(idOrSlug: string, userId: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    if (tournament.status !== TournamentStatus.REGISTRATION) {
+      throw new BadRequestException('Registration is closed.');
+    }
+
+    const partyMember = await this.prisma.partyMember.findFirst({
+      where: { userId },
+      include: {
+        party: {
+          include: { members: true },
+        },
+      },
+    });
+
+    if (!partyMember) throw new BadRequestException('You are not in a party.');
+    if (partyMember.party.ownerId !== userId)
+      throw new BadRequestException(
+        'Only the party captain can utilize this party to create an open team.',
+      );
+
+    const memberCount = partyMember.party.members.length;
+    if (memberCount < 2) {
+      throw new BadRequestException(
+        `Your party only has ${memberCount} member. You need at least 2 members to create an open team. For 1 player, use the Solo Queue.`,
+      );
+    }
+    if (memberCount >= tournament.minTeamSize) {
+      throw new BadRequestException(
+        `Your party meets the minimum team size. Please use "Join with Full Party" instead.`,
+      );
+    }
+
+    const memberIds = partyMember.party.members.map((m: any) => m.userId);
+
+    const existingTeamPlayer = await this.prisma.teamPlayer.findFirst({
+      where: {
+        playerId: { in: memberIds },
+        team: { tournamentId: tournament.id, isDeleted: false },
+      },
+    });
+    if (existingTeamPlayer)
+      throw new BadRequestException(
+        'A member of your party is already part of another team in this tournament.',
+      );
+
+    const existingParticipant = await this.prisma.participant.findFirst({
+      where: { 
+        tournamentId: tournament.id, 
+        userId: { in: memberIds },
+        status: { not: ParticipantStatus.CANCELLED },
+      },
+    });
+    if (existingParticipant)
+      throw new BadRequestException(
+        'A member of your party is already registered in this tournament.',
+      );
+
+    // Create Team snapshot but DO NOT automatically submit it as a participant yet.
+    return this.prisma.team.create({
+      data: {
+        name: partyMember.party.name,
+        tournamentId: tournament.id,
+        players: {
+          create: partyMember.party.members.map((m: any) => ({
+            playerId: m.userId,
+            role: m.role,
+          })),
+        },
+      },
+      include: { 
+        players: {
+          include: {
+            player: { select: { id: true, discordName: true, displayName: true, photo: true } },
+          },
+        } 
+      },
+    });
+  }
+
+  async joinSolo(idOrSlug: string, userId: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    if (tournament.status !== TournamentStatus.REGISTRATION) {
+      throw new BadRequestException('Registration is closed.');
+    }
+
+    const existingTeamPlayer = await this.prisma.teamPlayer.findFirst({
+      where: {
+        playerId: userId,
+        team: { tournamentId: tournament.id, isDeleted: false },
+      },
+    });
+    if (existingTeamPlayer)
+      throw new BadRequestException(
+        'You are already part of a team in this tournament. You cannot join the solo queue.',
+      );
+
+    const existingParticipant = await this.prisma.participant.findFirst({
+      where: { 
+        tournamentId: tournament.id, 
+        userId,
+        status: { not: ParticipantStatus.CANCELLED },
+      },
+    });
+    if (existingParticipant) {
+      if (existingParticipant.teamId === null) {
+        throw new BadRequestException('You are already in the solo queue for this tournament.');
+      }
+      throw new BadRequestException('You are already registered in this tournament.');
+    }
+
+    return this.prisma.participant.create({
+      data: {
+        tournamentId: tournament.id,
+        userId,
+        teamId: null, // explicit flag for solo queue
+        status: ParticipantStatus.REGISTERED,
+      },
+      include: {
+        user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+      },
+    });
+  }
+
+  async getSoloQueue(idOrSlug: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    return this.prisma.participant.findMany({
+      where: {
+        tournamentId: tournament.id,
+        teamId: null,
+        status: { not: ParticipantStatus.CANCELLED },
+      },
+      include: {
+        user: { select: { id: true, discordName: true, displayName: true, photo: true } },
+      },
+      orderBy: { createdAt: 'asc' },
     });
   }
 
