@@ -43,6 +43,7 @@ model User {
 
   chatMessagesSent    TournamentChatMessage[] @relation("ChatMessageSender")
   chatMessagesDeleted TournamentChatMessage[] @relation("ChatMessageDeleter")
+  chatMessagesResolved TournamentChatMessage[] @relation("ChatMessageResolver")
 
   @@index([status])
   @@index([isBlocked])
@@ -649,10 +650,14 @@ model TournamentChatMessage {
   issueType    String?
   isDeleted    Boolean         @default(false)
   deletedById  String?
+  isResolved   Boolean         @default(false)
+  resolvedById String?
+  response     String?
   createdAt    DateTime        @default(now())
   tournament   Tournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   sender       User            @relation("ChatMessageSender", fields: [senderId], references: [id])
   deletedBy    User?           @relation("ChatMessageDeleter", fields: [deletedById], references: [id])
+  resolvedBy   User?           @relation("ChatMessageResolver", fields: [resolvedById], references: [id])
 
   @@index([tournamentId, createdAt])
   @@map("tournament_chat_messages")

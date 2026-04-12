@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatMessageType, TournamentRoleType, NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -24,6 +24,8 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    @Inject(forwardRef(() => require('./chat.gateway').ChatGateway))
+    private readonly chatGateway: any,
   ) {}
 
   /**
@@ -154,13 +156,44 @@ export class ChatService {
   }
 
   /**
-   * Fetch all unresolved admin calls for the tournament admin hub.
+   * Fetch all admin calls for the tournament admin hub.
    */
   async getAdminCalls(tournamentId: string) {
     return this.prisma.tournamentChatMessage.findMany({
       where: { tournamentId, type: ChatMessageType.ADMIN_CALL, isDeleted: false },
-      include: { sender: { select: SENDER_SELECT } },
+      include: { 
+        sender: { select: SENDER_SELECT },
+        resolvedBy: { select: SENDER_SELECT }
+      },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Resolves an active Admin Call and notifies the room.
+   */
+  async resolveAdminCall(tournamentId: string, messageId: string, resolvedById: string, response: string) {
+    const access = await this.verifyAccess(resolvedById, tournamentId);
+    if (!access.isStaff) {
+      throw new ForbiddenException('Only staff can resolve admin calls');
+    }
+
+    const msg = await this.prisma.tournamentChatMessage.update({
+      where: { id: messageId, tournamentId },
+      data: { isResolved: true, resolvedById, response },
+      include: {
+        sender: { select: SENDER_SELECT },
+        resolvedBy: { select: SENDER_SELECT },
+      },
+    });
+
+    this.chatGateway.server.to(tournamentId).emit('adminCallResolved', {
+       messageId,
+       isResolved: true,
+       response,
+       resolvedBy: msg.resolvedBy
+    });
+
+    return msg;
   }
 }
