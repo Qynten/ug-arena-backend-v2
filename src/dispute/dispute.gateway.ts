@@ -32,17 +32,17 @@ export class DisputeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 
   @UseGuards(WsJwtGuard)
-  @SubscribeMessage('joinDisputeRoom')
+  @SubscribeMessage('joinMatchRoom')
   async handleJoinRoom(
-    @MessageBody('disputeId') disputeId: string,
+    @MessageBody('matchId') matchId: string,
     @ConnectedSocket() client: Socket,
   ) {
     const user = (client as any).user;
 
     try {
-      const canAccess = await this.disputeService.verifyUserCanAccessDispute(user.id, disputeId);
+      const canAccess = await this.disputeService.verifyUserCanAccessMatch(user.id, matchId);
       if (canAccess) {
-        client.join(disputeId);
+        client.join(matchId);
         return { status: 'success', message: 'Joined room successfully' };
       } else {
         return { status: 'error', message: 'Forbidden' };
@@ -53,22 +53,22 @@ export class DisputeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 
   @UseGuards(WsJwtGuard)
-  @SubscribeMessage('sendDisputeMessage')
+  @SubscribeMessage('sendMatchMessage')
   async handleSendMessage(
-    @MessageBody() payload: { disputeId: string; content: string },
+    @MessageBody() payload: { matchId: string; content: string },
     @ConnectedSocket() client: Socket,
   ) {
     const user = (client as any).user;
 
     try {
-      const message = await this.disputeService.createDisputeMessage(
-        payload.disputeId,
+      const message = await this.disputeService.createMatchMessage(
+        payload.matchId,
         user.id,
         payload.content,
       );
 
       // Broadcast to the room
-      this.server.to(payload.disputeId).emit('newDisputeMessage', message);
+      this.server.to(payload.matchId).emit('newMatchMessage', message);
 
       return { status: 'success', data: message };
     } catch (error: any) {

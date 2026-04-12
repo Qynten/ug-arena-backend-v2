@@ -25,7 +25,6 @@ import { InvitePlayerDto } from './dto/invite-player.dto';
 import { RespondTeamInviteDto } from './dto/respond-team-invite.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { CreateCustomTeamDto } from './dto/create-custom-team.dto';
-import { AddDisputeMessageDto } from './dto/add-dispute-message.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { TournamentRoleGuard } from '../common/guards/tournament-role.guard';
@@ -305,14 +304,45 @@ export class TournamentController {
     return this.tournamentService.getAllDisputes(id, userId);
   }
 
-  @Post('disputes/:disputeId/messages')
+  @Post(':id/matches/:matchId/check-in')
   @UseGuards(JwtAuthGuard)
-  addDisputeMessage(
-    @Param('disputeId') disputeId: string,
+  checkInMatch(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
     @GetUser('id') userId: string,
-    @Body() body: AddDisputeMessageDto,
   ) {
-    return this.tournamentService.addDisputeMessage(disputeId, userId, body.content);
+    return this.tournamentService.checkInMatch(id, matchId, userId);
+  }
+
+  @Post(':id/matches/:matchId/report-no-show')
+  @UseGuards(JwtAuthGuard)
+  reportNoShow(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.reportNoShow(id, matchId, userId);
+  }
+
+  @Get(':id/matches/:matchId/messages')
+  @UseGuards(JwtAuthGuard)
+  getMatchMessages(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.getMatchMessages(id, matchId, userId);
+  }
+
+  @Post(':id/matches/:matchId/messages')
+  @UseGuards(JwtAuthGuard)
+  addMatchMessage(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @GetUser('id') userId: string,
+    @Body('content') content: string,
+  ) {
+    return this.tournamentService.addMatchMessage(id, matchId, userId, content);
   }
 
   @Patch('disputes/:disputeId/resolve')

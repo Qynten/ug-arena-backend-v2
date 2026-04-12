@@ -1356,11 +1356,6 @@ export class TournamentService {
       const dispute = await prisma.matchDispute.create({
         data: { matchId, reportedById: userId },
         include: {
-          messages: {
-            include: {
-              sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
-            },
-          },
           reportedBy: { select: { id: true, discordName: true, displayName: true } },
         },
       });
@@ -1376,12 +1371,6 @@ export class TournamentService {
       include: {
         reportedBy: { select: { id: true, discordName: true, displayName: true, photo: true } },
         resolvedBy: { select: { id: true, discordName: true, displayName: true } },
-        messages: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
-          },
-        },
       },
     });
   }
@@ -1417,28 +1406,97 @@ export class TournamentService {
         },
         reportedBy: { select: { id: true, discordName: true, displayName: true, photo: true } },
         resolvedBy: { select: { id: true, discordName: true, displayName: true } },
-        messages: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
-          },
-        },
       },
     });
   }
 
-  async addDisputeMessage(disputeId: string, senderId: string, content: string) {
-    const dispute = await this.prisma.matchDispute.findUnique({ where: { id: disputeId } });
-    if (!dispute) throw new NotFoundException(`Dispute not found.`);
-    if (dispute.status === 'RESOLVED')
-      throw new BadRequestException('Cannot add messages to a resolved dispute.');
+  async getMatchMessages(tournamentId: string, matchId: string, userId: string) {
+    const match = await this.prisma.match.findUnique({ where: { id: matchId } });
+    if (!match) throw new NotFoundException('Match not found');
 
-    return this.prisma.disputeMessage.create({
-      data: { disputeId, senderId, content },
+    return this.prisma.matchMessage.findMany({
+      where: { matchId },
+      orderBy: { createdAt: 'asc' },
       include: {
         sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
       },
     });
+  }
+
+  async addMatchMessage(tournamentId: string, matchId: string, senderId: string, content: string) {
+    const match = await this.prisma.match.findUnique({ where: { id: matchId } });
+    if (!match) throw new NotFoundException('Match not found');
+
+    return this.prisma.matchMessage.create({
+      data: { matchId, senderId, content },
+      include: {
+        sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
+      },
+    });
+  }
+
+  async checkInMatch(tournamentId: string, matchId: string, userId: string) {
+    return this.prisma.$transaction(async (prisma) => {
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          participant1: true,
+          participant2: true,
+          tournament: { select: { checkInTimer: true } }
+        }
+      });
+      if (!match) throw new NotFoundException('Match not found');
+
+      // Determine which participant this user belongs to
+      let isP1 = false;
+      let isP2 = false;
+
+      // Note: for solo, userId matches. For teams, we check if the user is in the team.
+      if (match.participant1?.userId === userId) isP1 = true;
+      if (match.participant2?.userId === userId) isP2 = true;
+
+      if (!isP1 && !isP2 && match.participant1?.teamId && match.participant2?.teamId) {
+        // Needs a quick query to see if user is in team
+        const userT1 = await prisma.teamPlayer.findFirst({ where: { teamId: match.participant1.teamId, playerId: userId }});
+        if (userT1) isP1 = true;
+        const userT2 = await prisma.teamPlayer.findFirst({ where: { teamId: match.participant2.teamId, playerId: userId }});
+        if (userT2) isP2 = true;
+      }
+
+      if (!isP1 && !isP2) throw new ForbiddenException('You are not a participant of this match');
+
+      const data: any = {};
+      if (isP1) {
+        data.p1CheckInStatus = 'CHECKED_IN';
+        data.p1CheckInAt = new Date();
+      } else {
+        data.p2CheckInStatus = 'CHECKED_IN';
+        data.p2CheckInAt = new Date();
+      }
+
+      const p1Status = isP1 ? 'CHECKED_IN' : match.p1CheckInStatus;
+      const p2Status = isP2 ? 'CHECKED_IN' : match.p2CheckInStatus;
+
+      // If both check in now, mark matchReadyAt
+      if (p1Status === 'CHECKED_IN' && p2Status === 'CHECKED_IN' && !match.matchReadyAt) {
+        data.matchReadyAt = new Date();
+      }
+      
+      return prisma.match.update({
+        where: { id: matchId },
+        data,
+      });
+    });
+  }
+
+  async reportNoShow(tournamentId: string, matchId: string, userId: string) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+
+    // Auto open a dispute if possible
+    return this.openDispute(tournamentId, matchId, userId);
   }
 
   async resolveDispute(
@@ -1470,12 +1528,6 @@ export class TournamentService {
       where: { id: disputeId },
       data: { status: 'RESOLVED', resolution, resolvedById: resolverId },
       include: {
-        messages: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            sender: { select: { id: true, discordName: true, displayName: true, photo: true } },
-          },
-        },
         resolvedBy: { select: { id: true, discordName: true, displayName: true } },
       },
     });

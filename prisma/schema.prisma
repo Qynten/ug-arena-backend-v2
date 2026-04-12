@@ -24,7 +24,7 @@ model User {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   disputeEvidence  DisputeEvidence[]
-  disputeMessages  DisputeMessage[]
+  matchMessages    MatchMessage[]
   disputesReported MatchDispute[]    @relation("ReportedBy")
   disputesResolved MatchDispute[]    @relation("ResolvedBy")
 
@@ -100,6 +100,8 @@ model Tournament {
   metadata           Json?                @default("{}")
   rules              String?
   requirements       String?
+  checkInTimer       Int                  @default(10)
+  matchStartTimer    Int                  @default(5)
   isDeleted          Boolean              @default(false)
   ownerId            String
   createdAt          DateTime             @default(now())
@@ -298,7 +300,13 @@ model Match {
   scheduledAt        DateTime?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+  p1CheckInStatus    CheckInStatus  @default(PENDING)
+  p2CheckInStatus    CheckInStatus  @default(PENDING)
+  p1CheckInAt        DateTime?
+  p2CheckInAt        DateTime?
+  matchReadyAt       DateTime?
   disputes           MatchDispute[]
+  messages           MatchMessage[]
   matchHistories     MatchHistory[]
   sets               MatchSet[]
   participant1       Participant?   @relation("MatchP1", fields: [participant1Id], references: [id])
@@ -337,7 +345,6 @@ model MatchDispute {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   evidence     DisputeEvidence[]
-  messages     DisputeMessage[]
   match        Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
   reportedBy   User              @relation("ReportedBy", fields: [reportedById], references: [id])
   resolvedBy   User?             @relation("ResolvedBy", fields: [resolvedById], references: [id])
@@ -360,16 +367,16 @@ model DisputeEvidence {
   @@map("dispute_evidence")
 }
 
-model DisputeMessage {
-  id        String       @id @default(uuid())
-  disputeId String
+model MatchMessage {
+  id        String   @id @default(uuid())
+  matchId   String
   senderId  String
   content   String
-  createdAt DateTime     @default(now())
-  dispute   MatchDispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
-  sender    User         @relation(fields: [senderId], references: [id])
+  createdAt DateTime @default(now())
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id])
 
-  @@map("dispute_messages")
+  @@map("match_messages")
 }
 
 model score {

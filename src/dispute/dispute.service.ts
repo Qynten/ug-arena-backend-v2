@@ -1,42 +1,38 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { DisputeMessage } from '@prisma/client';
+import { MatchMessage } from '@prisma/client';
 
 @Injectable()
 export class DisputeService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async verifyUserCanAccessDispute(userId: string, disputeId: string): Promise<boolean> {
-    const dispute = await this.prisma.matchDispute.findUnique({
-      where: { id: disputeId },
+  async verifyUserCanAccessMatch(userId: string, matchId: string): Promise<boolean> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
       include: {
-        match: {
+        tournament: {
           include: {
-            tournament: {
+            staff: {
+              where: { userId },
+            },
+          },
+        },
+        participant1: {
+          include: {
+            user: true,
+            team: {
               include: {
-                staff: {
-                  where: { userId },
-                },
+                players: { where: { playerId: userId } },
               },
             },
-            participant1: {
+          },
+        },
+        participant2: {
+          include: {
+            user: true,
+            team: {
               include: {
-                user: true,
-                team: {
-                  include: {
-                    players: { where: { playerId: userId } },
-                  },
-                },
-              },
-            },
-            participant2: {
-              include: {
-                user: true,
-                team: {
-                  include: {
-                    players: { where: { playerId: userId } },
-                  },
-                },
+                players: { where: { playerId: userId } },
               },
             },
           },
@@ -44,16 +40,16 @@ export class DisputeService {
       },
     });
 
-    if (!dispute) {
-      throw new NotFoundException('Dispute not found');
+    if (!match) {
+      throw new NotFoundException('Match not found');
     }
 
-    const { match } = dispute;
     const { staff } = match.tournament;
+    const isOwner = match.tournament.ownerId === userId;
 
-    const hasStaffAccess = staff.some(
-      (s) => s.role === 'DRAFT_ADMIN' || s.role === 'DISPUTE_MANAGER',
-    );
+    if (isOwner) return true;
+
+    const hasStaffAccess = staff.length > 0;
     if (hasStaffAccess) return true;
 
     // Check if user is part of participant1
@@ -70,25 +66,22 @@ export class DisputeService {
       if (p2.team && p2.team.players.length > 0) return true;
     }
 
-    // If the user happens to have global ADMIN/SUPER_ADMIN roles we could check that,
-    // but schema says roles is on User model. Let's assume dispute rules apply locally first.
-
     return false;
   }
 
-  async createDisputeMessage(
-    disputeId: string,
+  async createMatchMessage(
+    matchId: string,
     senderId: string,
     content: string,
-  ): Promise<DisputeMessage> {
-    const hasAccess = await this.verifyUserCanAccessDispute(senderId, disputeId);
+  ): Promise<MatchMessage> {
+    const hasAccess = await this.verifyUserCanAccessMatch(senderId, matchId);
     if (!hasAccess) {
-      throw new ForbiddenException('User does not have access to this dispute room');
+      throw new ForbiddenException('User does not have access to this match room');
     }
 
-    return this.prisma.disputeMessage.create({
+    return this.prisma.matchMessage.create({
       data: {
-        disputeId,
+        matchId,
         senderId,
         content,
       },

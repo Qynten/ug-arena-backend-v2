@@ -136,4 +136,15 @@ export class UpdateTournamentDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   allowSubstitutions?: boolean;
+
+  // --- Timers ---
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  checkInTimer?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  matchStartTimer?: number;
 }
