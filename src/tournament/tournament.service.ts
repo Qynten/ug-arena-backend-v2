@@ -394,6 +394,19 @@ export class TournamentService {
       : undefined;
 
     try {
+      // If mathematically downgrading from a post-bracket state, ensure bracket data is wiped securely
+      if (rest.status && ['REGISTRATION', 'DRAFT', 'CANCELLED'].includes(rest.status)) {
+         const current = await this.prisma.tournament.findUnique({ where: { id }});
+         if (current && ['SEEDING', 'LIVE', 'COMPLETED'].includes(current.status)) {
+            await this.prisma.match.deleteMany({ where: { tournamentId: id } });
+            await this.prisma.round.deleteMany({ where: { tournamentId: id } });
+            await this.prisma.participant.updateMany({
+              where: { tournamentId: id },
+              data: { wins: 0, losses: 0, draws: 0, points: 0, buchholzScore: 0, tiebreakerScore: 0 }
+            });
+         }
+      }
+
       return await this.prisma.tournament.update({
         where: { id },
         data: {
@@ -432,81 +445,87 @@ export class TournamentService {
   }
 
   async getBracket(idOrSlug: string) {
-    const tournament = await this.prisma.tournament.findFirst({
-      where: {
-        isDeleted: false,
-        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
-      },
-      select: { id: true },
-    });
+    try {
+      const tournament = await this.prisma.tournament.findFirst({
+        where: {
+          isDeleted: false,
+          OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+        },
+        select: { id: true },
+      });
 
-    if (!tournament) {
-      throw new NotFoundException(`Tournament not found.`);
+      if (!tournament) {
+        throw new NotFoundException(`Tournament not found.`);
+      }
+
+      return await this.prisma.match.findMany({
+        where: { tournamentId: tournament.id },
+        include: {
+          participant1: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  discordName: true,
+                  photo: true,
+                },
+              },
+              team: {
+                include: {
+                  players: {
+                    include: {
+                      player: {
+                        select: {
+                          id: true,
+                          discordName: true,
+                          displayName: true,
+                          photo: true,
+                        }
+                      }
+                    }
+                  }
+                },
+              },
+            },
+          },
+          participant2: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  discordName: true,
+                  photo: true,
+                },
+              },
+              team: {
+                include: {
+                  players: {
+                    include: {
+                      player: {
+                        select: {
+                          id: true,
+                          discordName: true,
+                          displayName: true,
+                          photo: true,
+                        }
+                      }
+                    }
+                  }
+                },
+              },
+            },
+          },
+          round: true,
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to get bracket for tournament ${idOrSlug}: ${error?.message || 'Unknown error'}`);
+      return [];
     }
-
-    return this.prisma.match.findMany({
-      where: { tournamentId: tournament.id },
-      include: {
-        participant1: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                discordName: true,
-                photo: true,
-              },
-            },
-            team: {
-              include: {
-                players: {
-                  include: {
-                    player: {
-                      select: {
-                        id: true,
-                        discordName: true,
-                        displayName: true,
-                        photo: true,
-                      }
-                    }
-                  }
-                }
-              },
-            },
-          },
-        },
-        participant2: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                discordName: true,
-                photo: true,
-              },
-            },
-            team: {
-              include: {
-                players: {
-                  include: {
-                    player: {
-                      select: {
-                        id: true,
-                        discordName: true,
-                        displayName: true,
-                        photo: true,
-                      }
-                    }
-                  }
-                }
-              },
-            },
-          },
-        },
-        round: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
   }
 
   async validateAndUnlockMatches(tournamentId: string) {
@@ -548,6 +567,42 @@ export class TournamentService {
           data: { unlockedAt: new Date() },
         });
       }
+    }
+  }
+
+  private async recalculateBuchholz(tournamentId: string) {
+    const participants = await this.prisma.participant.findMany({
+      where: { tournamentId },
+      include: {
+        matchHistories: true,
+      },
+    });
+
+    if (participants.length === 0) return;
+
+    const participantMap = new Map(participants.map((p) => [p.id, p]));
+
+    for (const p of participants) {
+      let buchholzScore = 0;
+
+      // Find all unique opponents this participant has faced
+      const uniqueOpponentIds = new Set(
+        p.matchHistories.filter((mh) => mh.opponentId).map((mh) => mh.opponentId),
+      );
+
+      for (const oppId of uniqueOpponentIds) {
+        const opp = participantMap.get(oppId);
+        if (opp) {
+          // Standard Buchholz: Sum of the final scores of all faced opponents.
+          // Using points, falling back to wins if points aren't actively populated.
+          buchholzScore += opp.points || opp.wins || 0;
+        }
+      }
+
+      await this.prisma.participant.update({
+        where: { id: p.id },
+        data: { buchholzScore },
+      });
     }
   }
 
@@ -670,6 +725,21 @@ export class TournamentService {
         });
 
         // Update participant win/loss/draw tallies
+        // FIRST: Revert previous tallies to prevent mathematical infinite-stacking on rapid edits
+        if (match.status === 'COMPLETED') {
+            if (match.draw) {
+               await prisma.participant.update({ where: { id: match.participant1Id }, data: { draws: { decrement: 1 } } });
+               await prisma.participant.update({ where: { id: match.participant2Id }, data: { draws: { decrement: 1 } } });
+            } else if (match.winnerId) {
+               const oldLoserId = match.winnerId === match.participant1Id ? match.participant2Id : match.participant1Id;
+               await prisma.participant.update({ where: { id: match.winnerId }, data: { wins: { decrement: 1 } } });
+               if (oldLoserId) {
+                   await prisma.participant.update({ where: { id: oldLoserId }, data: { losses: { decrement: 1 } } });
+               }
+            }
+        }
+
+        // SECOND: Apply the new incoming tallies safely
         if (isDraw) {
           await prisma.participant.updateMany({
             where: { id: { in: [match.participant1Id, match.participant2Id] } },
@@ -705,6 +775,7 @@ export class TournamentService {
     });
 
     await this.validateAndUnlockMatches(tournamentId);
+    await this.recalculateBuchholz(tournamentId);
 
     return result;
   }
@@ -1000,12 +1071,13 @@ export class TournamentService {
   }
 
   async generateBracket(idOrSlug: string, userId: string) {
-    const fetchedTournament = await this.prisma.tournament.findFirst({
-      where: {
-        isDeleted: false,
-        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
-      },
-    });
+    try {
+      const fetchedTournament = await this.prisma.tournament.findFirst({
+        where: {
+          isDeleted: false,
+          OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+        },
+      });
 
     if (!fetchedTournament) {
       throw new NotFoundException(`Tournament not found.`);
@@ -1027,6 +1099,10 @@ export class TournamentService {
       // 0. Clean up any existing bracket data (allows safe regeneration if status was manually reset)
       await prisma.match.deleteMany({ where: { tournamentId: tournament.id } });
       await prisma.round.deleteMany({ where: { tournamentId: tournament.id } });
+      await prisma.participant.updateMany({
+        where: { tournamentId: tournament.id },
+        data: { wins: 0, losses: 0, draws: 0, points: 0, buchholzScore: 0, tiebreakerScore: 0 }
+      });
 
       // --- SEEDING PRE-FLIGHT: SOLO QUEUE AUTO-FILL ---
       if (tournament.type === TournamentType.TEAM) {
@@ -1036,19 +1112,19 @@ export class TournamentService {
         });
 
         if (solos.length > 0) {
-          const registeredParticipants = await prisma.participant.findMany({
-            where: { tournamentId: tournament.id, status: ParticipantStatus.REGISTERED, teamId: { not: null } }
-          });
-          const registeredTeamIds = registeredParticipants.map(p => p.teamId!).filter(Boolean);
-
-          const openTeams = await prisma.team.findMany({
-            where: { tournamentId: tournament.id, isDeleted: false, id: { notIn: registeredTeamIds } },
+          // Fetch ALL teams in the tournament
+          const allTeams = await prisma.team.findMany({
+            where: { tournamentId: tournament.id, isDeleted: false },
             include: { players: true }
           });
+
+          // Filter teams that actually have an open slot
+          const openTeams = allTeams.filter(t => t.players.length < tournament.maxTeamSize);
 
           // 1. Fill existing open teams
           for (const team of openTeams) {
             let currentSize = team.players.length;
+            let addedSolos = false;
             while (currentSize < tournament.maxTeamSize && solos.length > 0) {
               const soloParticipant = solos.shift()!;
               await prisma.teamPlayer.create({
@@ -1056,14 +1132,22 @@ export class TournamentService {
               });
               await prisma.participant.delete({ where: { id: soloParticipant.id } }); // Remove solo participant record
               currentSize++;
+              addedSolos = true;
             }
-            if (currentSize >= tournament.minTeamSize) {
+            
+            // If we injected solo players into this team, forcefully register/update them as participants!
+            if (addedSolos) {
               const newPlayers = await prisma.teamPlayer.findMany({ where: { teamId: team.id }});
+              
+              // Ensure we don't violate unique teamId constraint if a cancelled participant record already exists
+              await prisma.participant.deleteMany({ where: { tournamentId: tournament.id, teamId: team.id } });
+              
               await prisma.participant.create({
                 data: {
                   tournamentId: tournament.id,
                   userId: newPlayers.find(p => p.role === TeamPlayerRole.CAPTAIN)?.playerId || newPlayers[0].playerId,
                   teamId: team.id,
+                  status: ParticipantStatus.REGISTERED, // Ensure it's active
                   rosters: {
                     create: newPlayers.map(p => ({
                       userId: p.playerId,
@@ -1083,12 +1167,12 @@ export class TournamentService {
           let teamsToCreate = 0;
           if (solos.length > 0) {
              const spotsAvailable = tournament.maxParticipants - currentTotalTeamsCount;
-             const possibleTeams = Math.floor(solos.length / tournament.minTeamSize);
+             const possibleTeams = Math.ceil(solos.length / tournament.maxTeamSize);
              teamsToCreate = Math.min(spotsAvailable, possibleTeams);
           }
 
           for (let i = 0; i < teamsToCreate; i++) {
-            const size = Math.min(solos.length - (teamsToCreate - 1 - i) * tournament.minTeamSize, tournament.maxTeamSize);
+            const size = Math.min(solos.length, tournament.maxTeamSize);
             const teamSolos = solos.splice(0, size);
             
             const randomTeamName = `Arena Squad ${Math.floor(Math.random() * 10000)}`;
@@ -1102,27 +1186,27 @@ export class TournamentService {
                     role: idx === 0 ? TeamPlayerRole.CAPTAIN : TeamPlayerRole.MEMBER
                   }))
                 }
-              },
-              include: { players: true }
-            });
-
-            await prisma.participant.create({
-              data: {
-                tournamentId: tournament.id,
-                userId: newTeam.players[0].playerId,
-                teamId: newTeam.id,
-                rosters: {
-                  create: newTeam.players.map(p => ({
-                    userId: p.playerId,
-                    role: p.role
-                  }))
-                }
               }
             });
 
             for (const s of teamSolos) {
-              await prisma.participant.delete({ where: { id: s.id } });
+              await prisma.participant.delete({ where: { id: s.id } }); // Remove solo participant record
             }
+
+            await prisma.participant.create({
+              data: {
+                tournamentId: tournament.id,
+                userId: teamSolos[0].userId!, // Direct use avoids undefined indexing from generated includes
+                teamId: newTeam.id,
+                status: ParticipantStatus.REGISTERED,
+                rosters: {
+                  create: teamSolos.map((s, idx) => ({
+                    userId: s.userId!,
+                    role: idx === 0 ? TeamPlayerRole.CAPTAIN : TeamPlayerRole.MEMBER
+                  }))
+                }
+              }
+            });
           }
 
           // 3. Any solos STILL remaining are cancelled.
@@ -1140,7 +1224,7 @@ export class TournamentService {
     const participants = await this.prisma.participant.findMany({
       where: {
         tournamentId: tournament.id,
-        status: 'REGISTERED',
+        status: ParticipantStatus.REGISTERED,
         ...(tournament.type === TournamentType.TEAM ? { teamId: { not: null } } : {})
       },
     });
@@ -1157,7 +1241,7 @@ export class TournamentService {
     const shuffled = [...participants].sort(() => Math.random() - 0.5);
 
     // Use transaction to ensure full generation
-    return this.prisma.$transaction(async (prisma) => {
+    const transactionResult = await this.prisma.$transaction(async (prisma) => {
       const crypto = require('crypto');
 
       if (tournament.bracketType === 'SINGLE_ELIMINATION' || tournament.bracketType === 'DOUBLE_ELIMINATION') {
@@ -1227,8 +1311,9 @@ export class TournamentService {
                  participant1Id: null, participant2Id: null, nextMatchId: null, loserMoveToMatchId: null,
                  status: 'PENDING', branch: 'GRAND_FINALS_RESET'
              });
-             // Link GF 1 to GF 2
+             // Link GF 1 to GF 2 (Both the Winner and Loser advance IF the loser survives)
              gfMatches[0].nextMatchId = gfMatches[1].id;
+             gfMatches[0].loserMoveToMatchId = gfMatches[1].id;
           }
 
           // 3. Link nextMatchId & loserMoveToMatchId
@@ -1241,31 +1326,35 @@ export class TournamentService {
           
           if (tournament.bracketType === 'DOUBLE_ELIMINATION' && lRoundsCount > 0) {
              // L-Bracket next links
+             // L-Bracket next links
              for (let i = 0; i < lRoundsCount - 1; i++) {
                for (let j = 0; j < lMatches[i].length; j++) {
-                  if (i % 2 === 0) {
-                     lMatches[i][j].nextMatchId = lMatches[i + 1][j].id; // Even minor to odd major (1:1)
-                  } else {
-                     lMatches[i][j].nextMatchId = lMatches[i + 1][Math.floor(j / 2)].id; // Odd major to even minor (2:1)
-                  }
+                  lMatches[i][j].nextMatchId = lMatches[i + 1][Math.floor(j / 2)].id;
                }
              }
 
              // W-Bracket to L-Bracket links
              for (let r = 0; r < totalRounds; r++) {
                 if (r === 0) {
-                   // W-Round 0 drops to L-Round 0 (2:1)
+                   // W-Round 0 drops to L-Round 0
                    for (let j = 0; j < wMatches[r].length; j++) {
                       wMatches[r][j].loserMoveToMatchId = lMatches[0][Math.floor(j / 2)].id;
                    }
                 } else {
-                   // W-Round r drops to L-Round 2r - 1 (1:1 cross-mapped)
+                   // W-Round r drops to L-Round 2r - 1
                    const lRoundIndex = 2 * r - 1;
                    if (lRoundIndex < lRoundsCount) {
                       const numMatches = wMatches[r].length;
-                      for (let j = 0; j < numMatches; j++) {
-                         const targetIndex = (numMatches - 1) - j; // Reverse mapping to prevent rematches too early
-                         wMatches[r][j].loserMoveToMatchId = lMatches[lRoundIndex][targetIndex].id;
+                      
+                      // For W-Finals (last round that drops), it maps 1:1 into L-Finals
+                      if (numMatches === 1 && lMatches[lRoundIndex].length === 1) {
+                          wMatches[r][0].loserMoveToMatchId = lMatches[lRoundIndex][0].id;
+                      } else {
+                          // Parallel drop: 2:1 into the SECOND HALF of the L-Round.
+                          const offset = lMatches[lRoundIndex].length / 2;
+                          for (let j = 0; j < numMatches; j++) {
+                             wMatches[r][j].loserMoveToMatchId = lMatches[lRoundIndex][offset + Math.floor(j / 2)].id;
+                          }
                       }
                    }
                 }
@@ -1399,6 +1488,10 @@ export class TournamentService {
 
       return { message: 'Bracket generated successfully.', bracketSize };
     });
+      return transactionResult;
+    } catch (err: any) {
+      throw err;
+    }
   }
 
   async goLive(idOrSlug: string, userId: string) {
@@ -1629,6 +1722,25 @@ export class TournamentService {
         match.winnerId === match.participant1Id ? match.participant2Id : match.participant1Id;
 
       if (loserId) {
+        // Special Double Elimination Trap Event: GRAND FINALS Bracket Reset Evaluation
+        const currentMatchContext = await prisma.match.findUnique({ where: { id: match.id } });
+        if (currentMatchContext?.branch === 'GRAND_FINALS') {
+            const loserRecord = await prisma.participant.findUnique({ where: { id: loserId } });
+            
+            // If the incoming loser natively logs 2 distinct physical Postgres losses here, it mathematically
+            // proves they were the Losers Bracket survivor. Ergo, their subsequent Grand Finals defeat is a terminal double elimination
+            // event. The tournament is mathematically concluded and the Rematch match sequence is permanently aborted.
+            if (loserRecord && loserRecord.losses >= 2) {
+                this.logger.log(`Terminal double-elimination concluded in Grand Finals for Participant ${loserId}. Aborting Rematch sequence.`);
+                if (match.nextMatchId) {
+                    await prisma.match.delete({ 
+                        where: { id: match.nextMatchId }
+                    });
+                }
+                return; // Do NOT advance the loser OR the winner any further! Event finalized.
+            }
+        }
+        
         const loserMatch = await prisma.match.findUnique({
           where: { id: match.loserMoveToMatchId },
         });
@@ -1727,44 +1839,116 @@ export class TournamentService {
       throw new ForbiddenException('Only the owner or a Seed Admin can seed match slots.');
     }
 
-    return this.prisma.match.update({
-      where: { id: matchId },
-      data: {
-        ...(payload.participant1Id !== undefined && { participant1Id: payload.participant1Id }),
-        ...(payload.participant2Id !== undefined && { participant2Id: payload.participant2Id }),
-      },
-      include: {
-        participant1: { include: { team: { select: { id: true, name: true } } } },
-        participant2: { include: { team: { select: { id: true, name: true } } } },
-        round: true,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const currentMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        include: { round: true },
+      });
+
+      if (!currentMatch) throw new NotFoundException('Match not found');
+
+      // Helper function to safely swap incoming participant with whatever currently occupies this match slot
+      const handleSwap = async (incomingId: string | null, slot: 'participant1Id' | 'participant2Id') => {
+        if (!incomingId) return;
+
+        // Is this participant already in another match in this exact same round?
+        const conflictingMatch = await tx.match.findFirst({
+          where: {
+            tournamentId,
+            roundId: currentMatch.roundId,
+            id: { not: matchId },
+            OR: [{ participant1Id: incomingId }, { participant2Id: incomingId }]
+          }
+        });
+
+        if (conflictingMatch) {
+           // Swap them with whoever was currently in this slot in our target match
+           const originalParticipantId = currentMatch[slot];
+           const conflictingSlot = conflictingMatch.participant1Id === incomingId ? 'participant1Id' : 'participant2Id';
+
+           await tx.match.update({
+             where: { id: conflictingMatch.id },
+             data: { [conflictingSlot]: originalParticipantId }
+           });
+        }
+      };
+
+      if (payload.participant1Id !== undefined && payload.participant1Id !== currentMatch.participant1Id) {
+        await handleSwap(payload.participant1Id, 'participant1Id');
+      }
+
+      if (payload.participant2Id !== undefined && payload.participant2Id !== currentMatch.participant2Id) {
+        await handleSwap(payload.participant2Id, 'participant2Id');
+      }
+
+      return tx.match.update({
+        where: { id: matchId },
+        data: {
+          ...(payload.participant1Id !== undefined ? { participant1Id: payload.participant1Id } : {}),
+          ...(payload.participant2Id !== undefined ? { participant2Id: payload.participant2Id } : {}),
+        },
+        include: {
+          participant1: { include: { team: { select: { id: true, name: true } }, user: { select: { id: true, discordName: true, displayName: true } } } },
+          participant2: { include: { team: { select: { id: true, name: true } }, user: { select: { id: true, discordName: true, displayName: true } } } },
+          round: true,
+        },
+      });
     });
   }
 
-  async openDispute(tournamentId: string, matchId: string, userId: string) {
-    const match = await this.prisma.match.findUnique({
-      where: { id: matchId },
-      select: { tournamentId: true, status: true },
-    });
+  async openDispute(tournamentId: string, matchId: string, userId: string, reason?: string, context?: string) {
+    const [match, tournament] = await Promise.all([
+      this.prisma.match.findUnique({
+        where: { id: matchId },
+        select: { tournamentId: true, status: true },
+      }),
+      this.prisma.tournament.findUnique({
+        where: { id: tournamentId },
+        select: { name: true, ownerId: true },
+      })
+    ]);
+    
     if (!match) throw new NotFoundException(`Match not found.`);
     if (match.tournamentId !== tournamentId)
       throw new BadRequestException('Match does not belong to this tournament.');
 
-    const existing = await this.prisma.matchDispute.findFirst({
-      where: { matchId, status: { not: 'RESOLVED' } },
-    });
-    if (existing) throw new BadRequestException('An active dispute already exists for this match.');
+    // Removed the active dispute existence block to allow multiple users to file independent dispute requests.
 
-    return this.prisma.$transaction(async (prisma) => {
-      const dispute = await prisma.matchDispute.create({
-        data: { matchId, reportedById: userId },
+    const dispute = await this.prisma.$transaction(async (prisma) => {
+      const d = await prisma.matchDispute.create({
+        data: { matchId, reportedById: userId, reason, context },
         include: {
           reportedBy: { select: { id: true, discordName: true, displayName: true } },
         },
       });
       await prisma.match.update({ where: { id: matchId }, data: { status: 'DISPUTED' } });
-      return dispute;
+      return d;
     });
+
+    try {
+      const staff = await this.prisma.tournamentStaff.findMany({
+        where: { tournamentId, role: { in: ['MODERATOR', 'DISPUTE_MANAGER', 'TOURNAMENT_OVERSEER', 'DRAFT_ADMIN'] } },
+        select: { userId: true },
+      });
+      const staffIds = staff.map((s) => s.userId);
+      const userIds = [...new Set([...staffIds, tournament?.ownerId])].filter(Boolean) as string[];
+
+      if (userIds.length > 0) {
+        await this.notificationsService.createMany(
+          userIds.map((uid) => ({
+            userId: uid,
+            type: NotificationType.ADMIN_CALL,
+            title: `Match Dispute Triggered`,
+            message: `${dispute.reportedBy?.displayName || dispute.reportedBy?.discordName || 'A player'} reported a dispute in match #${matchId.slice(-4).toUpperCase()} inside "${tournament?.name}".`,
+            payload: { tournamentId, matchId },
+          }))
+        );
+      }
+    } catch (e) {
+      console.error('Failed to notify staff of match dispute', e);
+    }
+
+    return dispute;
   }
 
   async getDisputeByMatch(matchId: string) {
@@ -1802,8 +1986,8 @@ export class TournamentService {
       include: {
         match: {
           include: {
-            participant1: { include: { team: { select: { name: true } } } },
-            participant2: { include: { team: { select: { name: true } } } },
+            participant1: { include: { user: true, team: { include: { players: { include: { player: true } } } } } },
+            participant2: { include: { user: true, team: { include: { players: { include: { player: true } } } } } },
             round: true
           }
         },
@@ -1910,7 +2094,7 @@ export class TournamentService {
   ) {
     const dispute = await this.prisma.matchDispute.findUnique({
       where: { id: disputeId },
-      include: { match: { select: { tournamentId: true } } },
+      include: { match: { select: { tournamentId: true, id: true, winnerId: true } } },
     });
     if (!dispute) throw new NotFoundException(`Dispute not found.`);
     if (dispute.status === 'RESOLVED')
@@ -1927,12 +2111,29 @@ export class TournamentService {
       throw new ForbiddenException('Only the owner or a Dispute Manager can resolve disputes.');
     }
 
-    return this.prisma.matchDispute.update({
-      where: { id: disputeId },
-      data: { status: 'RESOLVED', resolution, resolvedById: resolverId },
-      include: {
-        resolvedBy: { select: { id: true, discordName: true, displayName: true } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const resolved = await tx.matchDispute.update({
+        where: { id: disputeId },
+        data: { status: 'RESOLVED', resolution, resolvedById: resolverId },
+        include: {
+          resolvedBy: { select: { id: true, discordName: true, displayName: true } },
+        },
+      });
+
+      await tx.match.update({
+        where: { id: dispute.match.id },
+        data: { status: dispute.match.winnerId ? 'COMPLETED' : 'ONGOING' },
+      });
+
+      await tx.matchMessage.create({
+        data: {
+          matchId: dispute.match.id,
+          senderId: resolverId,
+          content: `✅ DISPUTE RESOLVED: ${resolution}`,
+        },
+      });
+
+      return resolved;
     });
   }
 
@@ -2183,6 +2384,14 @@ export class TournamentService {
       }
       throw new BadRequestException('You are already registered in this tournament.');
     }
+
+    await this.prisma.participant.deleteMany({
+      where: {
+        tournamentId: tournament.id,
+        userId,
+        status: ParticipantStatus.CANCELLED,
+      },
+    });
 
     return this.prisma.participant.create({
       data: {

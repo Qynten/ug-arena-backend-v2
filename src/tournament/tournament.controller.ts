@@ -307,8 +307,9 @@ export class TournamentController {
     @Param('id') id: string,
     @Param('matchId') matchId: string,
     @GetUser('id') userId: string,
+    @Body() body: { reason?: string; context?: string }
   ) {
-    return this.tournamentService.openDispute(id, matchId, userId);
+    return this.tournamentService.openDispute(id, matchId, userId, body?.reason, body?.context);
   }
 
   @Get(':id/matches/:matchId/disputes')

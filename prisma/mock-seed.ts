@@ -1,13 +1,13 @@
-import { PrismaClient, TeamPlayerRole, ParticipantStatus } from '@prisma/client';
+import { ParticipantStatus, TeamPlayerRole } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as dotenv from 'dotenv';
+import { Pool } from 'pg';
 
 dotenv.config();
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL as string,
-});
-
+const pool = new Pool({ connectionString: process.env.DATABASE_URL as string });
+const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -19,7 +19,7 @@ async function main() {
     const numTeams = parseInt(args[2] || '4', 10);
 
     if (!tournamentId) {
-      console.error('Please provide a tournament ID: npm run seed:tournament seed <tournament-id> <num-teams>');
+      console.error('Please provide a tournament ID: npm run mock-seed seed <tournament-id> <num-teams>');
       process.exit(1);
     }
 
@@ -45,13 +45,13 @@ async function main() {
 
     const currentTeamsCount = tournament._count.participants;
     const maxParticipants = tournament.maxParticipants;
-    
+
     console.log(`Tournament: ${tournament.name}`);
     console.log(`Config: Type=${tournament.type}, minTeamSize=${tournament.minTeamSize}, Max Participants=${maxParticipants}`);
     console.log(`Current participants/teams: ${currentTeamsCount}`);
 
     const teamsToCreate = Math.min(numTeams, maxParticipants - currentTeamsCount);
-    
+
     if (teamsToCreate <= 0) {
       console.log('Tournament is already full or requested to create 0 teams.');
       process.exit(0);
@@ -62,8 +62,8 @@ async function main() {
     for (let i = 0; i < teamsToCreate; i++) {
       const suffix = Math.random().toString(36).substring(2, 8);
       const teamSize = tournament.minTeamSize > 1 ? tournament.minTeamSize : 1;
-      
-      const members: any[] = [];
+      const members = [];
+
       // 1. Create mock users
       for (let j = 0; j < teamSize; j++) {
         const user = await prisma.user.create({
@@ -99,6 +99,7 @@ async function main() {
             tournamentId: tournament.id,
             userId: captain.id,
             teamId: team.id,
+            status: ParticipantStatus.REGISTERED,
             rosters: {
               create: members.map((m, index) => ({
                 userId: m.id,
@@ -118,34 +119,34 @@ async function main() {
     const tournamentId = args[1];
     
     if (!tournamentId) {
-       console.error('Please provide a tournament ID: npm run seed:tournament clear <tournament-id>');
-       process.exit(1);
+      console.error('Please provide a tournament ID: npm run mock-seed clear <tournament-id>');
+      process.exit(1);
     }
-    
+
     let tournamentIdToClear = tournamentId;
     if (tournamentId && !tournamentId.includes("-")) {
-       const tournament = await prisma.tournament.findFirst({
+      const tournament = await prisma.tournament.findFirst({
          where: {
-           OR: [
-             { id: tournamentId },
-             { slug: tournamentId },
-             { name: tournamentId }
-           ]
+            OR: [
+               { id: tournamentId },
+               { slug: tournamentId },
+               { name: tournamentId }
+            ]
          }
-       });
-       if (tournament) {
+      });
+      if (tournament) {
          tournamentIdToClear = tournament.id;
-       } else {
+      } else {
          console.error(`Tournament not found with name/ID: ${tournamentId}`);
          process.exit(1);
-       }
+      }
     }
-    
+
     console.log(`Clearing ALL mock data for tournament ${tournamentIdToClear}...`);
-    
+
     // Find all users that are part of mock teams for this tournament
     const mockTeams = await prisma.team.findMany({
-      where: { 
+      where: {
         tournamentId: tournamentIdToClear,
         name: { startsWith: 'Mock Team' }
       },
@@ -153,7 +154,7 @@ async function main() {
         players: true
       }
     });
-    
+
     let mockUserIds: string[] = [];
     mockTeams.forEach(t => {
       mockUserIds.push(...t.players.map(p => p.playerId));
@@ -162,15 +163,15 @@ async function main() {
     await prisma.participant.deleteMany({
       where: { tournamentId: tournamentIdToClear, teamId: { in: mockTeams.map(t => t.id) } }
     });
-    
+
     await prisma.team.deleteMany({
       where: { id: { in: mockTeams.map(t => t.id) } }
     });
-    
+
     await prisma.user.deleteMany({
       where: { id: { in: mockUserIds } }
     });
-    
+
     console.log(`Cleared ${mockTeams.length} mock teams and their users.`);
   } else {
     console.error('Unknown command. Use "seed" or "clear".');
