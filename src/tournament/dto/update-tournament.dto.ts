@@ -11,7 +11,7 @@ import {
   IsEnum,
   IsBoolean,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { CreatePrizePoolDto } from './create-tournament.dto';
 import { BracketType, TournamentStatus } from '@prisma/client';
 
@@ -134,5 +134,6 @@ export class UpdateTournamentDto {
 
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
   allowSubstitutions?: boolean;
 }

@@ -118,6 +118,7 @@ export class TournamentService {
           maxTeamSize: createTournamentDto.maxTeamSize,
           minTeamSize: createTournamentDto.minTeamSize,
           bracketType: createTournamentDto.bracketType,
+          allowSubstitutions: createTournamentDto.allowSubstitutions,
 
           owner: {
             connect: { id: ownerId },

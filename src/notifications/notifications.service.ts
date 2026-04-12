@@ -16,6 +16,15 @@ export class NotificationsService {
     const limit = parseInt(limitStr || '100', 10);
     const skip = (page - 1) * limit;
 
+    // Auto-delete notifications older than 2 days
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await this.prisma.notification.deleteMany({
+      where: {
+        userId,
+        createdAt: { lt: twoDaysAgo },
+      },
+    });
+
     const [data, total] = await Promise.all([
       this.prisma.notification.findMany({
         where: { userId },
@@ -87,6 +96,26 @@ export class NotificationsService {
     return this.prisma.notification.updateMany({
       where: { userId, isRead: false },
       data: { isRead: true },
+    });
+  }
+
+  async delete(notificationId: string, userId: string) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id: notificationId },
+    });
+
+    if (!notification) throw new NotFoundException('Notification not found.');
+    if (notification.userId !== userId)
+      throw new ForbiddenException("Cannot delete another user's notification.");
+
+    return this.prisma.notification.delete({
+      where: { id: notificationId },
+    });
+  }
+
+  async deleteAll(userId: string) {
+    return this.prisma.notification.deleteMany({
+      where: { userId },
     });
   }
 }
