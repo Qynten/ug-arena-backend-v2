@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 dotenv.config();
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL as string });
-const adapter = new PrismaPg(pool);
+const adapter = new PrismaPg(pool as any);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -62,7 +62,7 @@ async function main() {
     for (let i = 0; i < teamsToCreate; i++) {
       const suffix = Math.random().toString(36).substring(2, 8);
       const teamSize = tournament.minTeamSize > 1 ? tournament.minTeamSize : 1;
-      const members = [];
+      const members: any[] = [];
 
       // 1. Create mock users
       for (let j = 0; j < teamSize; j++) {
