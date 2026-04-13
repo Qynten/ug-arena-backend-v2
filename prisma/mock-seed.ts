@@ -115,6 +115,63 @@ async function main() {
 
     console.log('Done seeding mock teams! Check the tournament overview on the site.');
 
+  } else if (command === 'seed-solo') {
+    const tournamentId = args[1];
+    const numSolos = parseInt(args[2] || '4', 10);
+
+    if (!tournamentId) {
+      console.error('Please provide a tournament ID: npm run mock-seed seed-solo <tournament-id> <num-solos>');
+      process.exit(1);
+    }
+
+    const tournament = await prisma.tournament.findFirst({
+      where: {
+        OR: [
+          { id: tournamentId },
+          { slug: tournamentId },
+          { name: tournamentId },
+        ]
+      },
+      include: {
+        _count: {
+          select: { participants: { where: { status: { not: ParticipantStatus.CANCELLED }, teamId: null } } },
+        },
+      },
+    });
+
+    if (!tournament) {
+      console.error(`Tournament not found with ID: ${tournamentId}`);
+      process.exit(1);
+    }
+
+    console.log(`Tournament: ${tournament.name}`);
+    console.log(`Creating ${numSolos} mock solo players...`);
+
+    for (let i = 0; i < numSolos; i++) {
+      const suffix = Math.random().toString(36).substring(2, 8);
+      
+      const user = await prisma.user.create({
+        data: {
+          email: `mocksolo_${suffix}@example.com`,
+          displayName: `Mock Solo ${suffix}`,
+          discordName: `mocksolo_${suffix}`,
+        },
+      });
+
+      await prisma.participant.create({
+        data: {
+          tournamentId: tournament.id,
+          userId: user.id,
+          teamId: null,
+          status: ParticipantStatus.REGISTERED,
+        },
+      });
+      
+      console.log(`Created solo participant: Mock Solo ${suffix}`);
+    }
+
+    console.log('Done seeding mock solo players! Check the tournament overview on the site.');
+
   } else if (command === 'clear') {
     const tournamentId = args[1];
     
@@ -160,8 +217,17 @@ async function main() {
       mockUserIds.push(...t.players.map(p => p.playerId));
     });
 
+    // Find mock solos
+    const mockSolos = await prisma.user.findMany({
+      where: {
+        email: { startsWith: 'mocksolo_' }
+      }
+    });
+    mockUserIds.push(...mockSolos.map(u => u.id));
+
+    // Delete participants matching these users
     await prisma.participant.deleteMany({
-      where: { tournamentId: tournamentIdToClear, teamId: { in: mockTeams.map(t => t.id) } }
+      where: { tournamentId: tournamentIdToClear, userId: { in: mockUserIds } }
     });
 
     await prisma.team.deleteMany({
@@ -172,7 +238,7 @@ async function main() {
       where: { id: { in: mockUserIds } }
     });
 
-    console.log(`Cleared ${mockTeams.length} mock teams and their users.`);
+    console.log(`Cleared ${mockTeams.length} mock teams and ${mockSolos.length} mock solos, and their users.`);
   } else {
     console.error('Unknown command. Use "seed" or "clear".');
   }

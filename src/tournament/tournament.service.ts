@@ -332,6 +332,7 @@ export class TournamentService {
       include: {
         prizePools: true,
         participants: {
+          where: { status: { not: ParticipantStatus.CANCELLED } },
           include: {
             user: { select: { id: true, discordName: true, displayName: true, photo: true } },
             team: { select: { id: true, name: true } }
@@ -2288,9 +2289,9 @@ export class TournamentService {
       );
 
     const memberCount = partyMember.party.members.length;
-    if (memberCount < 2) {
+    if (memberCount < 1) {
       throw new BadRequestException(
-        `Your party only has ${memberCount} member. You need at least 2 members to create an open team. For 1 player, use the Solo Queue.`,
+        `Your party must have at least 1 member.`,
       );
     }
     if (memberCount >= tournament.minTeamSize) {
