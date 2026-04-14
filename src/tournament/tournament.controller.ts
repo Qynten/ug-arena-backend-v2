@@ -151,6 +151,16 @@ export class TournamentController {
     return this.tournamentService.getSoloQueue(id);
   }
 
+  @Delete(':id/solo-queue/:participantId')
+  @UseGuards(JwtAuthGuard)
+  removeSoloQueueParticipant(
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.removeSoloQueueParticipant(id, participantId, userId);
+  }
+
   @Delete(':id/leave')
   @UseGuards(JwtAuthGuard)
   leaveTournament(@Param('id') id: string, @GetUser('id') userId: string) {

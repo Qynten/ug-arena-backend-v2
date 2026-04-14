@@ -2431,6 +2431,46 @@ export class TournamentService {
     });
   }
 
+  /**
+   * Allows admins to remove an accepted member from the solo queue pool.
+   */
+  async removeSoloQueueParticipant(idOrSlug: string, participantId: string, requesterId: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+      select: { id: true, ownerId: true },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    const isOwner = tournament.ownerId === requesterId;
+    const staff = await this.prisma.tournamentStaff.findFirst({
+      where: { tournamentId: tournament.id, userId: requesterId }
+    });
+    const userRoleObj = await this.prisma.user.findUnique({ where: { id: requesterId }, select: { roles: true }});
+    const hasAdminRole = userRoleObj?.roles?.includes(UserRole.ADMIN) || userRoleObj?.roles?.includes(UserRole.SUPER_ADMIN);
+    const isAdmin = isOwner || staff || hasAdminRole;
+
+    if (!isAdmin) {
+      throw new ForbiddenException('Only an admin can remove solo queue members.');
+    }
+
+    const participant = await this.prisma.participant.findFirst({
+      where: { id: participantId, tournamentId: tournament.id, teamId: null }
+    });
+
+    if (!participant) {
+      throw new NotFoundException('Solo queue participant not found.');
+    }
+
+    return this.prisma.participant.update({
+      where: { id: participant.id },
+      data: { status: ParticipantStatus.CANCELLED }
+    });
+  }
+
   async leaveTournament(idOrSlug: string, userId: string) {
     const tournament = await this.prisma.tournament.findFirst({
       where: {
