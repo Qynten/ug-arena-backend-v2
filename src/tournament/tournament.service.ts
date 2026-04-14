@@ -1121,13 +1121,14 @@ export class TournamentService {
           });
 
           // Filter teams that actually have an open slot
-          const openTeams = allTeams.filter(t => t.players.length < tournament.maxTeamSize);
+          const maxCapacity = tournament.maxTeamSize + (tournament.allowSubstitutions ? 1 : 0);
+          const openTeams = allTeams.filter(t => t.players.length < maxCapacity);
 
           // 1. Fill existing open teams
           for (const team of openTeams) {
             let currentSize = team.players.length;
             let addedSolos = false;
-            while (currentSize < tournament.maxTeamSize && solos.length > 0) {
+            while (currentSize < maxCapacity && solos.length > 0) {
               const soloParticipant = solos.shift()!;
               await prisma.teamPlayer.create({
                 data: { teamId: team.id, playerId: soloParticipant.userId!, role: TeamPlayerRole.MEMBER }
@@ -1169,12 +1170,12 @@ export class TournamentService {
           let teamsToCreate = 0;
           if (solos.length > 0) {
              const spotsAvailable = tournament.maxParticipants - currentTotalTeamsCount;
-             const possibleTeams = Math.ceil(solos.length / tournament.maxTeamSize);
+             const possibleTeams = Math.ceil(solos.length / maxCapacity);
              teamsToCreate = Math.min(spotsAvailable, possibleTeams);
           }
 
           for (let i = 0; i < teamsToCreate; i++) {
-            const size = Math.min(solos.length, tournament.maxTeamSize);
+            const size = Math.min(solos.length, maxCapacity);
             const teamSolos = solos.splice(0, size);
             
             const randomTeamName = `Arena Squad ${Math.floor(Math.random() * 10000)}`;
