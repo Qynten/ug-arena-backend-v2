@@ -898,6 +898,7 @@ export class TournamentService {
         where: { tournamentId: tournament.id, isDeleted: false },
         include: {
           players: {
+            orderBy: { role: 'asc' },
             include: {
               player: {
                 select: {
@@ -2430,6 +2431,123 @@ export class TournamentService {
     });
   }
 
+  async leaveTournament(idOrSlug: string, userId: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    return this.prisma.$transaction(async (prisma) => {
+      // 1. Determine who is leaving
+      const partyMember = await prisma.partyMember.findFirst({
+        where: { userId },
+        include: { party: { include: { members: true } } },
+      });
+
+      const isPartyLeader = partyMember && partyMember.party.ownerId === userId;
+      let usersToRemove: string[] = [userId];
+
+      if (isPartyLeader) {
+        usersToRemove = partyMember.party.members.map((m: any) => m.userId);
+      }
+
+      // 2. Handle Team case
+      const teamPlayer = await prisma.teamPlayer.findFirst({
+        where: { playerId: userId, team: { tournamentId: tournament.id, isDeleted: false } },
+        include: { team: { include: { players: true, participants: true } } }
+      });
+
+      let wasInTeamOrActive = false;
+
+      if (teamPlayer) {
+        const team = teamPlayer.team;
+        
+        // Find which users to remove are actually in this team
+        const playersInTeam = team.players.map((p: any) => p.playerId);
+        const toRemoveFromTeam = usersToRemove.filter(uid => playersInTeam.includes(uid));
+
+        if (toRemoveFromTeam.length > 0) {
+          wasInTeamOrActive = true;
+          // Remove them
+          await prisma.teamPlayer.deleteMany({
+            where: { teamId: team.id, playerId: { in: toRemoveFromTeam } }
+          });
+          await prisma.teamPlayerRegistration.deleteMany({
+            where: { teamId: team.id, playerId: { in: toRemoveFromTeam } }
+          });
+          if (team.participants.length > 0) {
+            await prisma.tournamentRoster.deleteMany({
+              where: { participant: { teamId: team.id }, userId: { in: toRemoveFromTeam } }
+            });
+          }
+
+          // Check remaining
+          const remainingPlayers = team.players.filter((p: any) => !toRemoveFromTeam.includes(p.playerId));
+
+          if (remainingPlayers.length === 0) {
+            // Team is empty -> delete team & mark participant as canceled
+            if (team.participants.length > 0) {
+              await prisma.participant.updateMany({
+                where: { teamId: team.id, tournamentId: tournament.id },
+                data: { status: ParticipantStatus.CANCELLED }
+              });
+            }
+            await prisma.team.update({ where: { id: team.id }, data: { isDeleted: true } });
+          } else {
+            // Team is not empty. Did we remove the captain?
+            const hasCaptain = remainingPlayers.some((p: any) => p.role === TeamPlayerRole.CAPTAIN);
+            if (!hasCaptain) {
+              // Pick a new captain from remaining
+              const newCaptain = remainingPlayers[0];
+              await prisma.teamPlayer.update({
+                where: { id: newCaptain.id },
+                data: { role: TeamPlayerRole.CAPTAIN }
+              });
+              // Update tournament roster role if it exists
+              if (team.participants.length > 0) {
+                // Must update via participant/roster matching
+                await prisma.tournamentRoster.updateMany({
+                  where: { participant: { teamId: team.id }, userId: newCaptain.playerId },
+                  data: { role: TeamPlayerRole.CAPTAIN }
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Handle Solo check
+      const participants = await prisma.participant.findMany({
+        where: {
+          tournamentId: tournament.id,
+          userId: { in: usersToRemove },
+          status: { not: ParticipantStatus.CANCELLED },
+          teamId: null 
+        }
+      });
+
+      if (participants.length > 0) {
+        wasInTeamOrActive = true;
+        for (const p of participants) {
+          await prisma.participant.update({
+            where: { id: p.id },
+            data: { status: ParticipantStatus.CANCELLED }
+          });
+        }
+      }
+
+      if (!wasInTeamOrActive) {
+        throw new BadRequestException('You are not registered in this tournament.');
+      }
+
+      return { message: 'Successfully left the tournament.' };
+    });
+  }
+
   async createCustomTeam(idOrSlug: string, userId: string, name: string) {
     const tournament = await this.prisma.tournament.findFirst({
       where: {
@@ -2749,6 +2867,37 @@ export class TournamentService {
             userId: memberId
           }
         });
+      }
+
+      // Check if captain was removed and reassign if necessary
+      if (memberRecord.role === TeamPlayerRole.CAPTAIN) {
+        const remainingPlayers = team.players.filter(p => p.playerId !== memberId);
+        if (remainingPlayers.length > 0) {
+          const newCaptain = remainingPlayers[0];
+          await prisma.teamPlayer.update({
+            where: { id: newCaptain.id },
+            data: { role: TeamPlayerRole.CAPTAIN }
+          });
+          
+          if (team.participants.length > 0) {
+            await prisma.tournamentRoster.updateMany({
+              where: { participant: { teamId }, userId: newCaptain.playerId },
+              data: { role: TeamPlayerRole.CAPTAIN }
+            });
+          }
+        } else {
+          // If the team is now empty, delete it
+          await prisma.team.update({
+            where: { id: teamId },
+            data: { isDeleted: true }
+          });
+          if (team.participants.length > 0) {
+            await prisma.participant.updateMany({
+              where: { teamId, tournamentId: tournament.id },
+              data: { status: ParticipantStatus.CANCELLED }
+            });
+          }
+        }
       }
 
       return { message: `Player removed from team successfully.` };

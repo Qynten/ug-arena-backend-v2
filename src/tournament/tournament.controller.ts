@@ -151,6 +151,12 @@ export class TournamentController {
     return this.tournamentService.getSoloQueue(id);
   }
 
+  @Delete(':id/leave')
+  @UseGuards(JwtAuthGuard)
+  leaveTournament(@Param('id') id: string, @GetUser('id') userId: string) {
+    return this.tournamentService.leaveTournament(id, userId);
+  }
+
   @Post(':id/create-team')
   @UseGuards(JwtAuthGuard)
   createCustomTeam(
