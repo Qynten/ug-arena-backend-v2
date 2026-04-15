@@ -530,20 +530,19 @@ export class TournamentService {
   }
 
   async validateAndUnlockMatches(tournamentId: string) {
-    const lockedMatches = await this.prisma.match.findMany({
+    const matchesToValidate = await this.prisma.match.findMany({
       where: {
         tournamentId,
         status: 'PENDING',
-        unlockedAt: null,
         participant1Id: { not: null },
         participant2Id: { not: null },
       },
       include: { round: true },
     });
 
-    if (lockedMatches.length === 0) return;
+    if (matchesToValidate.length === 0) return;
 
-    for (const m of lockedMatches) {
+    for (const m of matchesToValidate) {
       const p1Blocking = await this.prisma.match.findFirst({
         where: {
           tournamentId,
@@ -562,7 +561,14 @@ export class TournamentService {
         },
       });
 
-      if (!p1Blocking && !p2Blocking) {
+      const isBlocked = !!(p1Blocking || p2Blocking);
+
+      if (isBlocked && m.unlockedAt !== null) {
+        await this.prisma.match.update({
+          where: { id: m.id },
+          data: { unlockedAt: null },
+        });
+      } else if (!isBlocked && m.unlockedAt === null) {
         await this.prisma.match.update({
           where: { id: m.id },
           data: { unlockedAt: new Date() },
@@ -1951,6 +1957,8 @@ export class TournamentService {
       console.error('Failed to notify staff of match dispute', e);
     }
 
+    await this.validateAndUnlockMatches(tournamentId);
+
     return dispute;
   }
 
@@ -2114,7 +2122,7 @@ export class TournamentService {
       throw new ForbiddenException('Only the owner or a Dispute Manager can resolve disputes.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const resolved = await tx.matchDispute.update({
         where: { id: disputeId },
         data: { status: 'RESOLVED', resolution, resolvedById: resolverId },
@@ -2138,6 +2146,10 @@ export class TournamentService {
 
       return resolved;
     });
+
+    await this.validateAndUnlockMatches(tournamentId);
+
+    return result;
   }
 
   // ---------------------------------------------------------------------------
