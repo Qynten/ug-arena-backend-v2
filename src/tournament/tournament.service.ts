@@ -2053,12 +2053,15 @@ export class TournamentService {
       if (match.participant1?.userId === userId) isP1 = true;
       if (match.participant2?.userId === userId) isP2 = true;
 
-      if (!isP1 && !isP2 && match.participant1?.teamId && match.participant2?.teamId) {
-        // Needs a quick query to see if user is in team
-        const userT1 = await prisma.teamPlayer.findFirst({ where: { teamId: match.participant1.teamId, playerId: userId }});
-        if (userT1) isP1 = true;
-        const userT2 = await prisma.teamPlayer.findFirst({ where: { teamId: match.participant2.teamId, playerId: userId }});
-        if (userT2) isP2 = true;
+      if (!isP1 && !isP2 && (match.participant1?.teamId || match.participant2?.teamId)) {
+        if (match.participant1?.teamId) {
+          const userT1 = await prisma.teamPlayer.findFirst({ where: { teamId: match.participant1.teamId, playerId: userId }});
+          if (userT1 && userT1.role === 'CAPTAIN') isP1 = true;
+        }
+        if (match.participant2?.teamId) {
+          const userT2 = await prisma.teamPlayer.findFirst({ where: { teamId: match.participant2.teamId, playerId: userId }});
+          if (userT2 && userT2.role === 'CAPTAIN') isP2 = true;
+        }
       }
 
       if (!isP1 && !isP2) throw new ForbiddenException('You are not a participant of this match');
@@ -2084,6 +2087,42 @@ export class TournamentService {
         where: { id: matchId },
         data,
       });
+    });
+  }
+
+  async adminCheckIn(tournamentId: string, matchId: string, userId: string, teamNum: 1 | 2) {
+    return this.prisma.$transaction(async (prisma) => {
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: { tournament: { select: { ownerId: true } } }
+      });
+      if (!match) throw new NotFoundException('Match not found');
+
+      const isOwner = match.tournament.ownerId === userId;
+      const isAdmin = await prisma.tournamentStaff.findFirst({ where: { tournamentId, userId, role: { in: ['MODERATOR', 'DISPUTE_MANAGER', 'TOURNAMENT_OVERSEER'] } }});
+      
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { roles: true }});
+      const isSuperAdmin = user?.roles?.includes(UserRole.ADMIN) || user?.roles?.includes(UserRole.SUPER_ADMIN);
+
+      if (!isOwner && !isAdmin && !isSuperAdmin) throw new ForbiddenException('Admin access required to force check-in.');
+
+      const data: any = {};
+      if (teamNum === 1) {
+        data.p1CheckInStatus = 'CHECKED_IN';
+        data.p1CheckInAt = new Date();
+      } else {
+        data.p2CheckInStatus = 'CHECKED_IN';
+        data.p2CheckInAt = new Date();
+      }
+
+      const p1Status = teamNum === 1 ? 'CHECKED_IN' : match.p1CheckInStatus;
+      const p2Status = teamNum === 2 ? 'CHECKED_IN' : match.p2CheckInStatus;
+
+      if (p1Status === 'CHECKED_IN' && p2Status === 'CHECKED_IN' && !match.matchReadyAt) {
+        data.matchReadyAt = new Date();
+      }
+
+      return prisma.match.update({ where: { id: matchId }, data });
     });
   }
 
@@ -2731,6 +2770,7 @@ export class TournamentService {
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },
       include: {
+        teamVotes: true,
         players: {
           include: {
             player: {
@@ -2954,6 +2994,93 @@ export class TournamentService {
       }
 
       return { message: `Player removed from team successfully.` };
+    });
+  }
+
+  // --- Team Hub API ---
+  async voteTeamAction(tournamentId: string, teamId: string, type: 'CAPTAIN' | 'KICK', targetId: string, voterId: string) {
+    return this.prisma.$transaction(async (prisma) => {
+      const voter = await prisma.teamPlayer.findFirst({ where: { teamId, playerId: voterId } });
+      if (!voter) throw new ForbiddenException('You must be a team member to cast a vote');
+
+      const teamPlayers = await prisma.teamPlayer.findMany({ where: { teamId } });
+      const currentCount = teamPlayers.length;
+
+      if (!teamPlayers.find(p => p.playerId === targetId)) throw new NotFoundException('Target user is not in the team');
+
+      await prisma.teamVote.upsert({
+        where: { teamId_type_targetId_voterId: { teamId, type, targetId, voterId } },
+        update: {},
+        create: { teamId, type, targetId, voterId: voterId },
+      });
+
+      const totalVotes = await prisma.teamVote.count({ where: { teamId, type, targetId }});
+      const majority = Math.floor(currentCount / 2) + 1;
+      
+      let executedFor = null;
+      if (totalVotes >= majority) {
+        if (type === 'CAPTAIN') {
+          await prisma.teamPlayer.updateMany({ where: { teamId, role: 'CAPTAIN' }, data: { role: 'MEMBER' }});
+          await prisma.teamPlayer.updateMany({ where: { teamId, playerId: targetId }, data: { role: 'CAPTAIN' }});
+          await prisma.teamVote.deleteMany({ where: { teamId, type: 'CAPTAIN' } }); 
+          executedFor = targetId;
+        } else if (type === 'KICK') {
+          const isCaptain = teamPlayers.find(p => p.playerId === targetId)?.role === 'CAPTAIN';
+          await prisma.teamPlayer.deleteMany({ where: { teamId, playerId: targetId }});
+          await prisma.teamVote.deleteMany({ where: { teamId, type: 'KICK', targetId }});
+          executedFor = targetId;
+          
+          if (isCaptain) {
+            const remaining = await prisma.teamPlayer.findMany({ where: { teamId }});
+            if (remaining.length > 0) {
+              await prisma.teamPlayer.update({ where: { id: remaining[0].id }, data: { role: 'CAPTAIN' }});
+            }
+          }
+        }
+      }
+
+      return { totalVotes, majority, executedFor };
+    });
+  }
+
+  async getTeamMessages(teamId: string, userId: string) {
+    const isMember = await this.prisma.teamPlayer.findFirst({ where: { teamId, playerId: userId }});
+    const staffCheck = await this.prisma.tournamentStaff.findFirst({ where: { userId }}); // Simplification: Staff could theoretically bypass 
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { roles: true }});
+    const isSuper = user?.roles?.includes('ADMIN') || user?.roles?.includes('SUPER_ADMIN');
+
+    if (!isMember && !staffCheck && !isSuper) throw new ForbiddenException('Secure Team Chat: Not authorized.');
+
+    return this.prisma.teamMessage.findMany({
+      where: { teamId },
+      include: {
+        sender: { select: { id: true, discordName: true, displayName: true, photo: true } }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+  }
+
+  async addTeamMessage(teamId: string, userId: string, content: string) {
+    const isMember = await this.prisma.teamPlayer.findFirst({ where: { teamId, playerId: userId }});
+    if (!isMember) throw new ForbiddenException('Secure Team Chat: Not authorized to send.');
+
+    return this.prisma.teamMessage.create({
+      data: { teamId, senderId: userId, content },
+      include: {
+        sender: { select: { id: true, discordName: true, displayName: true, photo: true } }
+      }
+    });
+  }
+
+  async openTeamDispute(teamId: string, userId: string, reason?: string, context?: string) {
+    const isMember = await this.prisma.teamPlayer.findFirst({ where: { teamId, playerId: userId }});
+    if (!isMember) throw new ForbiddenException('Secure Team Chat: Not authorized.');
+
+    const existing = await this.prisma.teamDispute.findFirst({ where: { teamId, status: 'PENDING' }});
+    if (existing) return existing;
+
+    return this.prisma.teamDispute.create({
+      data: { teamId, reportedById: userId, reason, context, status: 'PENDING' }
     });
   }
 }

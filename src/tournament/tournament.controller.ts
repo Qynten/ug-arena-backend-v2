@@ -218,6 +218,47 @@ export class TournamentController {
     return this.tournamentService.removeTeamMember(id, teamId, memberId, userId);
   }
 
+  @Post(':id/teams/:teamId/vote')
+  @UseGuards(JwtAuthGuard)
+  voteTeamAction(
+    @Param('id') id: string,
+    @Param('teamId') teamId: string,
+    @Body('type') type: 'CAPTAIN' | 'KICK',
+    @Body('targetId') targetId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.voteTeamAction(id, teamId, type, targetId, userId);
+  }
+
+  @Get(':id/teams/:teamId/messages')
+  @UseGuards(JwtAuthGuard)
+  getTeamMessages(
+    @Param('teamId') teamId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.getTeamMessages(teamId, userId);
+  }
+
+  @Post(':id/teams/:teamId/messages')
+  @UseGuards(JwtAuthGuard)
+  addTeamMessage(
+    @Param('teamId') teamId: string,
+    @GetUser('id') userId: string,
+    @Body('content') content: string,
+  ) {
+    return this.tournamentService.addTeamMessage(teamId, userId, content);
+  }
+
+  @Post(':id/teams/:teamId/disputes')
+  @UseGuards(JwtAuthGuard)
+  openTeamDispute(
+    @Param('teamId') teamId: string,
+    @GetUser('id') userId: string,
+    @Body() body: { reason?: string; context?: string }
+  ) {
+    return this.tournamentService.openTeamDispute(teamId, userId, body.reason, body.context);
+  }
+
   @Patch(':id/matches/:matchId')
   @UseGuards(JwtAuthGuard)
   updateMatchScore(
@@ -346,6 +387,17 @@ export class TournamentController {
     @GetUser('id') userId: string,
   ) {
     return this.tournamentService.checkInMatch(id, matchId, userId);
+  }
+
+  @Post(':id/matches/:matchId/admin-check-in')
+  @UseGuards(JwtAuthGuard)
+  adminCheckIn(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @GetUser('id') userId: string,
+    @Body('teamNum') teamNum: 1 | 2,
+  ) {
+    return this.tournamentService.adminCheckIn(id, matchId, userId, teamNum);
   }
 
   @Post(':id/matches/:matchId/report-no-show')

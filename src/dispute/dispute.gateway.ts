@@ -75,4 +75,49 @@ export class DisputeGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return { status: 'error', message: error.message };
     }
   }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('joinTeamRoom')
+  async handleJoinTeamRoom(
+    @MessageBody('teamId') teamId: string,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = (client as any).user;
+
+    try {
+      const canAccess = await this.disputeService.verifyUserCanAccessTeam(user.id, teamId);
+      if (canAccess) {
+        client.join(`team_${teamId}`);
+        return { status: 'success', message: 'Joined team room successfully' };
+      } else {
+        return { status: 'error', message: 'Forbidden' };
+      }
+    } catch (error: any) {
+      return { status: 'error', message: error.message };
+    }
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('sendTeamMessage')
+  async handleSendTeamMessage(
+    @MessageBody() payload: { teamId: string; content: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = (client as any).user;
+
+    try {
+      const message = await this.disputeService.createTeamMessage(
+        payload.teamId,
+        user.id,
+        payload.content,
+      );
+
+      // Broadcast to the room
+      this.server.to(`team_${payload.teamId}`).emit('newTeamMessage', message);
+
+      return { status: 'success', data: message };
+    } catch (error: any) {
+      return { status: 'error', message: error.message };
+    }
+  }
 }

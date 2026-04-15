@@ -41,9 +41,14 @@ model User {
   partyMemberships PartyMember[] @relation("PartyMemberships")
   partyInvites     PartyInvite[] @relation("PartyInvites")
 
-  chatMessagesSent    TournamentChatMessage[] @relation("ChatMessageSender")
-  chatMessagesDeleted TournamentChatMessage[] @relation("ChatMessageDeleter")
+  chatMessagesSent     TournamentChatMessage[] @relation("ChatMessageSender")
+  chatMessagesDeleted  TournamentChatMessage[] @relation("ChatMessageDeleter")
   chatMessagesResolved TournamentChatMessage[] @relation("ChatMessageResolver")
+
+  teamMessagesSent     TeamMessage[] @relation("TeamMessageSender")
+  teamDisputesReported TeamDispute[] @relation("TeamReportedBy")
+  teamDisputesResolved TeamDispute[] @relation("TeamResolvedBy")
+  teamVotesCast        TeamVote[]    @relation("TeamVoteCaster")
 
   @@index([status])
   @@index([isBlocked])
@@ -69,19 +74,19 @@ model UserAccount {
 }
 
 model Tournament {
-  id                 String               @id @default(uuid())
-  slug               String               @unique @default(uuid())
+  id                 String                  @id @default(uuid())
+  slug               String                  @unique @default(uuid())
   name               String
   description        String?
-  game               String               @default("Chess")
-  region             String               @default("Global")
-  startTime          DateTime             @default(now())
+  game               String                  @default("Chess")
+  region             String                  @default("Global")
+  startTime          DateTime                @default(now())
   imageUrl           String?
   imageId            String?
-  imageMedia         Media?               @relation("TournamentBanner", fields: [imageId], references: [id])
-  type               TournamentType       @default(TEAM)
-  bracketType        BracketType          @default(SINGLE_ELIMINATION)
-  status             TournamentStatus     @default(DRAFT)
+  imageMedia         Media?                  @relation("TournamentBanner", fields: [imageId], references: [id])
+  type               TournamentType          @default(TEAM)
+  bracketType        BracketType             @default(SINGLE_ELIMINATION)
+  status             TournamentStatus        @default(DRAFT)
   regStart           DateTime?
   regEnd             DateTime?
   seedingStart       DateTime?
@@ -91,32 +96,32 @@ model Tournament {
   checkInStart       DateTime?
   checkInEnd         DateTime?
   maxParticipants    Int
-  minTeamSize        Int                  @default(1)
-  maxTeamSize        Int                  @default(5)
-  bestOf             Int                  @default(1)
-  allowDraws         Boolean              @default(false)
-  allowSubstitutions Boolean              @default(false)
+  minTeamSize        Int                     @default(1)
+  maxTeamSize        Int                     @default(5)
+  bestOf             Int                     @default(1)
+  allowDraws         Boolean                 @default(false)
+  allowSubstitutions Boolean                 @default(false)
   logo               String?
-  metadata           Json?                @default("{}")
+  metadata           Json?                   @default("{}")
   rules              String?
   requirements       String?
-  checkInTimer       Int                  @default(10)
-  matchStartTimer    Int                  @default(5)
-  isDeleted          Boolean              @default(false)
+  checkInTimer       Int                     @default(10)
+  matchStartTimer    Int                     @default(5)
+  isDeleted          Boolean                 @default(false)
   ownerId            String
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
   auditLogs          AuditLog[]
   matchHistories     MatchHistory[]
   matches            Match[]
-  participants       Participant[]        @relation("TournamentParticipants")
+  participants       Participant[]           @relation("TournamentParticipants")
   prizePools         PrizePool[]
-  rounds             Round[]              @relation("TournamentRounds")
-  scores             score[]              @relation("TournamentScores")
-  teams              Team[]               @relation("TournamentTeams")
+  rounds             Round[]                 @relation("TournamentRounds")
+  scores             score[]                 @relation("TournamentScores")
+  teams              Team[]                  @relation("TournamentTeams")
   activities         TournamentActivity[]
   staff              TournamentStaff[]
-  owner              User                 @relation("TournamentOwner", fields: [ownerId], references: [id])
+  owner              User                    @relation("TournamentOwner", fields: [ownerId], references: [id])
   chatMessages       TournamentChatMessage[]
 
   @@index([ownerId])
@@ -233,6 +238,10 @@ model Team {
   players                 TeamPlayer[]             @relation("TeamPlayers")
   tournament              Tournament               @relation("TournamentTeams", fields: [tournamentId], references: [id])
 
+  teamMessages TeamMessage[]
+  teamDisputes TeamDispute[]
+  teamVotes    TeamVote[]
+
   @@index([tournamentId])
   @@index([isDeleted])
   @@map("teams")
@@ -289,8 +298,8 @@ model Match {
   roundId            String
   participant1Id     String?
   participant2Id     String?
-  p1Score            Float            @default(0)
-  p2Score            Float            @default(0)
+  p1Score            Float          @default(0)
+  p2Score            Float          @default(0)
   status             MatchStatus    @default(PENDING)
   winnerId           String?
   draw               Boolean        @default(false)
@@ -671,4 +680,54 @@ model TournamentChatMessage {
 
   @@index([tournamentId, createdAt])
   @@map("tournament_chat_messages")
+}
+
+model TeamMessage {
+  id        String   @id @default(uuid())
+  teamId    String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sender    User     @relation("TeamMessageSender", fields: [senderId], references: [id])
+
+  @@map("team_messages")
+}
+
+model TeamDispute {
+  id           String        @id @default(uuid())
+  teamId       String
+  reportedById String
+  status       DisputeStatus @default(PENDING)
+  reason       String?
+  context      String?
+  resolution   String?
+  resolvedById String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  team         Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  reportedBy   User          @relation("TeamReportedBy", fields: [reportedById], references: [id])
+  resolvedBy   User?         @relation("TeamResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([teamId])
+  @@map("team_disputes")
+}
+
+model TeamVote {
+  id        String       @id @default(uuid())
+  teamId    String
+  type      TeamVoteType
+  targetId  String // The user being voted for (new captain or player to kick)
+  voterId   String
+  createdAt DateTime     @default(now())
+  team      Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  voter     User         @relation("TeamVoteCaster", fields: [voterId], references: [id])
+
+  @@unique([teamId, type, targetId, voterId])
+  @@map("team_votes")
+}
+
+enum TeamVoteType {
+  CAPTAIN
+  KICK
 }
