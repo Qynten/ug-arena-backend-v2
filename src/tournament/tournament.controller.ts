@@ -146,7 +146,6 @@ export class TournamentController {
   }
 
   @Get(':id/solo-queue')
-  @UseGuards(JwtAuthGuard)
   getSoloQueue(@Param('id') id: string) {
     return this.tournamentService.getSoloQueue(id);
   }
