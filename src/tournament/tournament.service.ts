@@ -3607,4 +3607,49 @@ export class TournamentService {
       data: { teamId, reportedById: userId, reason, context, status: 'PENDING' },
     });
   }
+
+  async notifyParticipants(tournamentId: string, userId: string, message?: string) {
+    await this.checkOwnership(tournamentId, { id: userId, roles: [UserRole.ADMIN, UserRole.SUPER_ADMIN] });
+
+    const tournament = await this.prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      include: {
+        participants: {
+          where: { status: { not: ParticipantStatus.CANCELLED } },
+          include: { team: { include: { players: true } } },
+        },
+      },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found');
+
+    const notificationMessage = message || `Action required: ${tournament.name} is starting soon!`;
+
+    const userIdsToNotify = new Set<string>();
+
+    for (const p of tournament.participants) {
+      if (p.userId) {
+        userIdsToNotify.add(p.userId);
+      }
+      if (p.team) {
+        for (const player of p.team.players) {
+          userIdsToNotify.add(player.playerId);
+        }
+      }
+    }
+
+    const notifications = Array.from(userIdsToNotify).map((uId) => ({
+      userId: uId,
+      type: NotificationType.TOURNAMENT_UPDATE,
+      title: 'Tournament Update',
+      message: notificationMessage,
+      payload: { tournamentId },
+    }));
+
+    if (notifications.length > 0) {
+      await this.notificationsService.createMany(notifications);
+    }
+
+    return { success: true, count: notifications.length };
+  }
 }

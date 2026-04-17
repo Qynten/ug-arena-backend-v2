@@ -82,6 +82,16 @@ export class CreateTournamentDto {
   @Transform(({ value }) => value === 'true' || value === true)
   randomizedSeating?: boolean;
 
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  hasGrandFinalRematch?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  isFeatured?: boolean;
+
   @IsDate()
   @IsOptional()
   @Type(() => Date)

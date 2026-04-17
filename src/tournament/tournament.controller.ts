@@ -458,4 +458,14 @@ export class TournamentController {
       body.tournamentId,
     );
   }
+
+  @Post(':id/notify')
+  @UseGuards(JwtAuthGuard)
+  notifyParticipants(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+    @Body('message') message?: string,
+  ) {
+    return this.tournamentService.notifyParticipants(id, userId, message);
+  }
 }

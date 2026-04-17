@@ -11,6 +11,7 @@ import { DisputeModule } from './dispute/dispute.module';
 import { MediaModule } from './media/media.module';
 import { ChatModule } from './chat/chat.module';
 import { RolesGuard } from './common/guards/roles.guard';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     DisputeModule,
     MediaModule,
     ChatModule,
+    AdminModule,
   ],
   controllers: [],
   providers: [

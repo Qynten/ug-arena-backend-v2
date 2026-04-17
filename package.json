@@ -8,7 +8,8 @@
     "start:dev": "nest start --watch",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\"",
-    "mock-seed": "ts-node prisma/mock-seed.ts"
+    "mock-seed": "ts-node prisma/mock-seed.ts",
+    "make-admin": "ts-node prisma/make-super-admin.ts"
   },
   "keywords": [],
   "author": "",
