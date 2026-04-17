@@ -40,8 +40,8 @@ While the core logic is test-ready via Jest (`@nestjs/testing`), day-to-day oper
 ### 1. Seeding Data for Testing
 If you need mock users, teams, or tournaments, you can populate the database:
 ```bash
-npm run mock-seed <Tournament Name> <Number of Teams>
-npm run mock-seed solo-seed <Tournament Name> <Number of Players>
+npm run mock-seed seed <Tournament Name> <Number of Teams>
+npm run mock-seed seed-solo <Tournament Name> <Number of Players>
 ```
 This script (`prisma/mock-seed.ts`) will insert realistic dummy data so you can test database relationships, generating brackets, and real-time chat interactions.
 

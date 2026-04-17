@@ -19,17 +19,15 @@ async function main() {
     const numTeams = parseInt(args[2] || '4', 10);
 
     if (!tournamentId) {
-      console.error('Please provide a tournament ID: npm run mock-seed seed <tournament-id> <num-teams>');
+      console.error(
+        'Please provide a tournament ID: npm run mock-seed seed <tournament-id> <num-teams>',
+      );
       process.exit(1);
     }
 
     const tournament = await prisma.tournament.findFirst({
       where: {
-        OR: [
-          { id: tournamentId },
-          { slug: tournamentId },
-          { name: tournamentId },
-        ]
+        OR: [{ id: tournamentId }, { slug: tournamentId }, { name: tournamentId }],
       },
       include: {
         _count: {
@@ -47,7 +45,9 @@ async function main() {
     const maxParticipants = tournament.maxParticipants;
 
     console.log(`Tournament: ${tournament.name}`);
-    console.log(`Config: Type=${tournament.type}, minTeamSize=${tournament.minTeamSize}, Max Participants=${maxParticipants}`);
+    console.log(
+      `Config: Type=${tournament.type}, minTeamSize=${tournament.minTeamSize}, Max Participants=${maxParticipants}`,
+    );
     console.log(`Current participants/teams: ${currentTeamsCount}`);
 
     const teamsToCreate = Math.min(numTeams, maxParticipants - currentTeamsCount);
@@ -114,27 +114,26 @@ async function main() {
     }
 
     console.log('Done seeding mock teams! Check the tournament overview on the site.');
-
   } else if (command === 'seed-solo') {
     const tournamentId = args[1];
     const numSolos = parseInt(args[2] || '4', 10);
 
     if (!tournamentId) {
-      console.error('Please provide a tournament ID: npm run mock-seed seed-solo <tournament-id> <num-solos>');
+      console.error(
+        'Please provide a tournament ID: npm run mock-seed seed-solo <tournament-id> <num-solos>',
+      );
       process.exit(1);
     }
 
     const tournament = await prisma.tournament.findFirst({
       where: {
-        OR: [
-          { id: tournamentId },
-          { slug: tournamentId },
-          { name: tournamentId },
-        ]
+        OR: [{ id: tournamentId }, { slug: tournamentId }, { name: tournamentId }],
       },
       include: {
         _count: {
-          select: { participants: { where: { status: { not: ParticipantStatus.CANCELLED }, teamId: null } } },
+          select: {
+            participants: { where: { status: { not: ParticipantStatus.CANCELLED }, teamId: null } },
+          },
         },
       },
     });
@@ -149,7 +148,7 @@ async function main() {
 
     for (let i = 0; i < numSolos; i++) {
       const suffix = Math.random().toString(36).substring(2, 8);
-      
+
       const user = await prisma.user.create({
         data: {
           email: `mocksolo_${suffix}@example.com`,
@@ -166,36 +165,31 @@ async function main() {
           status: ParticipantStatus.REGISTERED,
         },
       });
-      
+
       console.log(`Created solo participant: Mock Solo ${suffix}`);
     }
 
     console.log('Done seeding mock solo players! Check the tournament overview on the site.');
-
   } else if (command === 'clear') {
     const tournamentId = args[1];
-    
+
     if (!tournamentId) {
       console.error('Please provide a tournament ID: npm run mock-seed clear <tournament-id>');
       process.exit(1);
     }
 
     let tournamentIdToClear = tournamentId;
-    if (tournamentId && !tournamentId.includes("-")) {
+    if (tournamentId && !tournamentId.includes('-')) {
       const tournament = await prisma.tournament.findFirst({
-         where: {
-            OR: [
-               { id: tournamentId },
-               { slug: tournamentId },
-               { name: tournamentId }
-            ]
-         }
+        where: {
+          OR: [{ id: tournamentId }, { slug: tournamentId }, { name: tournamentId }],
+        },
       });
       if (tournament) {
-         tournamentIdToClear = tournament.id;
+        tournamentIdToClear = tournament.id;
       } else {
-         console.error(`Tournament not found with name/ID: ${tournamentId}`);
-         process.exit(1);
+        console.error(`Tournament not found with name/ID: ${tournamentId}`);
+        process.exit(1);
       }
     }
 
@@ -205,42 +199,44 @@ async function main() {
     const mockTeams = await prisma.team.findMany({
       where: {
         tournamentId: tournamentIdToClear,
-        name: { startsWith: 'Mock Team' }
+        name: { startsWith: 'Mock Team' },
       },
       include: {
-        players: true
-      }
+        players: true,
+      },
     });
 
-    let mockUserIds: string[] = [];
-    mockTeams.forEach(t => {
-      mockUserIds.push(...t.players.map(p => p.playerId));
+    const mockUserIds: string[] = [];
+    mockTeams.forEach((t) => {
+      mockUserIds.push(...t.players.map((p) => p.playerId));
     });
 
     // Find mock solos
     const mockSolos = await prisma.user.findMany({
       where: {
-        email: { startsWith: 'mocksolo_' }
-      }
+        email: { startsWith: 'mocksolo_' },
+      },
     });
-    mockUserIds.push(...mockSolos.map(u => u.id));
+    mockUserIds.push(...mockSolos.map((u) => u.id));
 
     // Delete participants matching these users
     await prisma.participant.deleteMany({
-      where: { tournamentId: tournamentIdToClear, userId: { in: mockUserIds } }
+      where: { tournamentId: tournamentIdToClear, userId: { in: mockUserIds } },
     });
 
     await prisma.team.deleteMany({
-      where: { id: { in: mockTeams.map(t => t.id) } }
+      where: { id: { in: mockTeams.map((t) => t.id) } },
     });
 
     await prisma.user.deleteMany({
-      where: { id: { in: mockUserIds } }
+      where: { id: { in: mockUserIds } },
     });
 
-    console.log(`Cleared ${mockTeams.length} mock teams and ${mockSolos.length} mock solos, and their users.`);
+    console.log(
+      `Cleared ${mockTeams.length} mock teams and ${mockSolos.length} mock solos, and their users.`,
+    );
   } else {
-    console.error('Unknown command. Use "seed" or "clear".');
+    console.error('Unknown command. Use "seed", "seed-solo", or "clear".');
   }
 
   await prisma.$disconnect();
