@@ -120,4 +120,26 @@ export class DisputeGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return { status: 'error', message: error.message };
     }
   }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('broadcastVoteUpdate')
+  async handleVoteUpdate(
+    @MessageBody() payload: { teamId: string; action: string; type: string; targetId: string; voterId: string; executedFor: string | null },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = (client as any).user;
+
+    try {
+      const canAccess = await this.disputeService.verifyUserCanAccessTeam(user.id, payload.teamId);
+      if (canAccess) {
+        // Broadcast to the room (and also the sender, so they sync cleanly if we wanted client update, but here we emit to all, wait emit to all is `this.server.to` and `client.to` is all EXCEPT sender. Let's send to all so sender UI updates from socket instead of complex local state, but the sender could do it itself too. Better to broadcast to ALL `this.server.to` to ensure everyone executes the same code path.)
+        this.server.to(`team_${payload.teamId}`).emit('teamVoteUpdate', payload);
+        return { status: 'success' };
+      } else {
+        return { status: 'error', message: 'Forbidden' };
+      }
+    } catch (error: any) {
+      return { status: 'error', message: error.message };
+    }
+  }
 }

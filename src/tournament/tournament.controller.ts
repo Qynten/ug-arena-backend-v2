@@ -218,6 +218,17 @@ export class TournamentController {
     return this.tournamentService.removeTeamMember(id, teamId, memberId, userId);
   }
 
+  @Patch(':id/teams/:teamId/members/:memberId/captain')
+  @UseGuards(JwtAuthGuard)
+  forceTeamCaptain(
+    @Param('id') id: string,
+    @Param('teamId') teamId: string,
+    @Param('memberId') memberId: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.tournamentService.forceTeamCaptain(id, teamId, memberId, userId);
+  }
+
   @Post(':id/teams/:teamId/vote')
   @UseGuards(JwtAuthGuard)
   voteTeamAction(
