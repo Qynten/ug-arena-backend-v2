@@ -11,6 +11,7 @@ import { DisputeModule } from './dispute/dispute.module';
 import { MediaModule } from './media/media.module';
 import { ChatModule } from './chat/chat.module';
 import { AdminModule } from './admin/admin.module';
+import { UpdatesModule } from './updates/updates.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AdminModule } from './admin/admin.module';
     MediaModule,
     ChatModule,
     AdminModule,
+    UpdatesModule,
   ],
   controllers: [],
   providers: [],

@@ -735,3 +735,13 @@ enum TeamVoteType {
   CAPTAIN
   KICK
 }
+
+model PlatformUpdate {
+  id        String   @id @default(uuid())
+  title     String
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_updates")
+}

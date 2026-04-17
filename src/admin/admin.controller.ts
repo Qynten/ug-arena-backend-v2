@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Delete, Body, Param, UseGuards, Post } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -42,5 +42,15 @@ export class AdminController {
   @Patch('tournaments/:id/featured')
   async toggleFeatured(@Param('id') tournamentId: string, @Body('isFeatured') isFeatured: boolean) {
     return this.adminService.setFeatured(tournamentId, isFeatured);
+  }
+
+  @Post('updates')
+  async createUpdate(@Body('title') title: string) {
+    return this.adminService.createUpdate(title);
+  }
+
+  @Delete('updates/:id')
+  async deleteUpdate(@Param('id') id: string) {
+    return this.adminService.deleteUpdate(id);
   }
 }

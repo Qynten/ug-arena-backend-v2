@@ -67,4 +67,16 @@ export class AdminService {
       data: { isFeatured },
     });
   }
+
+  async createUpdate(title: string) {
+    return this.prisma.platformUpdate.create({
+      data: { title },
+    });
+  }
+
+  async deleteUpdate(id: string) {
+    return this.prisma.platformUpdate.delete({
+      where: { id },
+    });
+  }
 }
