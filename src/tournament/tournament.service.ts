@@ -1706,7 +1706,20 @@ export class TournamentService {
       });
 
       if (nextMatch) {
-        const slot = !nextMatch.participant1Id ? 'participant1Id' : 'participant2Id';
+        // Find the 'old default winner' to cleanly overwrite them if this is a retrospective correction.
+        const oldWinnerId = match.winnerId === match.participant1Id ? match.participant2Id : match.participant1Id;
+        let slot = !nextMatch.participant1Id ? 'participant1Id' : 'participant2Id';
+
+        if (nextMatch.participant1Id === oldWinnerId) {
+          slot = 'participant1Id';
+        } else if (nextMatch.participant2Id === oldWinnerId) {
+          slot = 'participant2Id';
+        } else if (!nextMatch.participant1Id) {
+          slot = 'participant1Id';
+        } else if (!nextMatch.participant2Id) {
+          slot = 'participant2Id';
+        }
+
         await prisma.match.update({
           where: { id: match.nextMatchId },
           data: { [slot]: match.winnerId },
@@ -1755,7 +1768,20 @@ export class TournamentService {
         });
 
         if (loserMatch) {
-          const slot = !loserMatch.participant1Id ? 'participant1Id' : 'participant2Id';
+          // If this is an outcome correction, the new winner *used* to be the recorded loser and is sitting in this match!
+          const oldLoserId = match.winnerId;
+          let slot = !loserMatch.participant1Id ? 'participant1Id' : 'participant2Id';
+
+          if (loserMatch.participant1Id === oldLoserId) {
+            slot = 'participant1Id';
+          } else if (loserMatch.participant2Id === oldLoserId) {
+            slot = 'participant2Id';
+          } else if (!loserMatch.participant1Id) {
+            slot = 'participant1Id';
+          } else if (!loserMatch.participant2Id) {
+            slot = 'participant2Id';
+          }
+
           await prisma.match.update({
             where: { id: match.loserMoveToMatchId },
             data: { [slot]: loserId },
