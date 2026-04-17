@@ -19,17 +19,15 @@ import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { RegisterTeamDto } from './dto/register-team.dto';
-import { CreatePartyDto } from './dto/create-party.dto';
 import { UpdateMatchScoreDto } from './dto/update-match-score.dto';
 import { InvitePlayerDto } from './dto/invite-player.dto';
 import { RespondTeamInviteDto } from './dto/respond-team-invite.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { CreateCustomTeamDto } from './dto/create-custom-team.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { Roles } from '../common/decorators/roles.decorator';
 import { TournamentRoleGuard } from '../common/guards/tournament-role.guard';
 import { TournamentRoles } from '../common/decorators/tournament-roles.decorator';
-import { UserRole, TournamentRoleType } from '@prisma/client';
+import { TournamentRoleType } from '@prisma/client';
 import { GetUser } from '../common/decorators/get-user.decorator';
 
 @Controller('tournaments')
@@ -350,8 +348,8 @@ export class TournamentController {
   @Post(':id/seed')
   @UseGuards(JwtAuthGuard, TournamentRoleGuard)
   @TournamentRoles(TournamentRoleType.SEED_ADMIN, TournamentRoleType.TOURNAMENT_OVERSEER)
-  seedBracket(@Param('id') id: string, @GetUser('id') userId: string) {
-    return this.tournamentService.seedBracket(id, userId);
+  seedBracket(@Param('id') id: string) {
+    return this.tournamentService.seedBracket(id);
   }
 
   @Patch(':id/matches/:matchId/seed')
@@ -420,12 +418,8 @@ export class TournamentController {
 
   @Get(':id/matches/:matchId/messages')
   @UseGuards(JwtAuthGuard)
-  getMatchMessages(
-    @Param('id') id: string,
-    @Param('matchId') matchId: string,
-    @GetUser('id') userId: string,
-  ) {
-    return this.tournamentService.getMatchMessages(id, matchId, userId);
+  getMatchMessages(@Param('id') id: string, @Param('matchId') matchId: string) {
+    return this.tournamentService.getMatchMessages(id, matchId);
   }
 
   @Post(':id/matches/:matchId/messages')

@@ -114,7 +114,7 @@ export class AuthService {
       await this.jwtService.verifyAsync(refreshToken, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException('Refresh token expired or invalid');
     }
 

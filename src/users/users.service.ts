@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { User, UserRole, UserStatus } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -98,8 +98,9 @@ export class UsersService {
       include: { photoMedia: true },
     });
     if (user) {
-      const { password, refreshTokenHash, ...result } = user;
-      return result;
+      delete (user as any).password;
+      delete (user as any).refreshTokenHash;
+      return user;
     }
     return null;
   }

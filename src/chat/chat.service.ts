@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatMessageType, TournamentRoleType, NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ChatGateway } from './chat.gateway';
 
 const SENDER_SELECT = {
   id: true,
@@ -30,7 +31,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
-    @Inject(forwardRef(() => require('./chat.gateway').ChatGateway))
+    @Inject(forwardRef(() => ChatGateway))
     private readonly chatGateway: any,
   ) {}
 

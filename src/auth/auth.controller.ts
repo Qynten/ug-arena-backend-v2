@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards, Req } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDiscordDto } from './dto/login-discord.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';

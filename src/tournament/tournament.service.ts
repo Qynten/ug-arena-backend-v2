@@ -9,8 +9,8 @@ import {
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { RegisterTeamDto } from './dto/register-team.dto';
-import { CreatePartyDto } from './dto/create-party.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import * as crypto from 'crypto';
 import {
   UserRole,
   TournamentRoleType,
@@ -438,7 +438,7 @@ export class TournamentService {
         where: { id },
         data: { isDeleted: true },
       });
-    } catch (error) {
+    } catch {
       throw new NotFoundException(`Cannot delete. Tournament with ID ${id} not found.`);
     }
   }
@@ -1004,14 +1004,6 @@ export class TournamentService {
 
     if (existingPlayer) throw new BadRequestException('This player is already on the team.');
 
-    // Get requester info for notification message
-    const requester = await this.prisma.user.findUnique({
-      where: { id: requesterId },
-      select: { discordName: true, displayName: true },
-    });
-
-    const captainName = requester?.displayName || requester?.discordName || 'Your captain';
-
     // Create the invite and the notification in a transaction
     return this.prisma.$transaction(async (prisma) => {
       const registration = await prisma.teamPlayerRegistration.create({
@@ -1282,21 +1274,19 @@ export class TournamentService {
 
       // Use transaction to ensure full generation
       const transactionResult = await this.prisma.$transaction(async (prisma) => {
-        const crypto = require('crypto');
-
         if (
           tournament.bracketType === 'SINGLE_ELIMINATION' ||
           tournament.bracketType === 'DOUBLE_ELIMINATION'
         ) {
           // 1. Create Round records in DB
-          let wRoundsData = [];
+          const wRoundsData = [];
           for (let i = 1; i <= totalRounds; i++) {
             wRoundsData.push(
               await prisma.round.create({ data: { name: i, tournamentId: tournament.id } }),
             );
           }
 
-          let lRoundsData: any[] = [];
+          const lRoundsData: any[] = [];
           let lRoundsCount = 0;
           if (tournament.bracketType === 'DOUBLE_ELIMINATION') {
             lRoundsCount = Math.max(0, 2 * totalRounds - 2);
@@ -1314,7 +1304,7 @@ export class TournamentService {
 
           const wMatches: any[][] = [];
           const lMatches: any[][] = [];
-          let gfMatches: any[] = [];
+          const gfMatches: any[] = [];
 
           // W MATCHES
           for (let r = 0; r < totalRounds; r++) {
@@ -1468,7 +1458,6 @@ export class TournamentService {
                 where: { id: m.id },
                 data: { status: 'COMPLETED', winnerId: m.participant1Id, p1Score: 1, p2Score: 0 },
               });
-              // @ts-ignore
               await this.advanceWinner(
                 {
                   id: m.id,
@@ -1487,7 +1476,7 @@ export class TournamentService {
           const numRounds = Math.ceil(Math.log2(participants.length)) || 1;
           const matchesPerRound = Math.floor(participants.length / 2);
 
-          let roundRecords = [];
+          const roundRecords: any[] = [];
           for (let i = 1; i <= numRounds; i++) {
             roundRecords.push(
               await prisma.round.create({ data: { name: i, tournamentId: tournament.id } }),
@@ -1540,11 +1529,11 @@ export class TournamentService {
           const N = participants.length;
           const rounds = N % 2 === 0 ? N - 1 : N;
 
-          let dummyArray = [...participants];
+          const dummyArray = [...participants];
           if (N % 2 !== 0) dummyArray.push({ id: 'BYE' } as any);
 
           const numTeams = dummyArray.length;
-          let roundRecords = [];
+          const roundRecords: any[] = [];
           for (let i = 1; i <= rounds; i++) {
             roundRecords.push(
               await prisma.round.create({ data: { name: i, tournamentId: tournament.id } }),
@@ -1554,8 +1543,8 @@ export class TournamentService {
           const rrMatches: any[] = [];
           for (let r = 0; r < rounds; r++) {
             for (let i = 0; i < numTeams / 2; i++) {
-              let p1 = dummyArray[i];
-              let p2 = dummyArray[numTeams - 1 - i];
+              const p1 = dummyArray[i];
+              const p2 = dummyArray[numTeams - 1 - i];
               // Skip BYE matches in DB
               if (p1.id === 'BYE' || p2.id === 'BYE') continue;
 
@@ -1622,7 +1611,7 @@ export class TournamentService {
    * Requires SEED_ADMIN or TOURNAMENT_OVERSEER role (or tournament owner).
    * Idempotent: clears existing Round 1 participant slots before re-assigning.
    */
-  async seedBracket(tournamentId: string, userId: string) {
+  async seedBracket(tournamentId: string) {
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
       select: { ownerId: true, status: true, bracketType: true },
@@ -2095,12 +2084,13 @@ export class TournamentService {
       const userIds = [...new Set([...staffIds, tournament?.ownerId])].filter(Boolean) as string[];
 
       if (userIds.length > 0) {
+        const matchNumber = await this.resolveMatchNumber(tournamentId, matchId);
         await this.notificationsService.createMany(
           userIds.map((uid) => ({
             userId: uid,
             type: NotificationType.ADMIN_CALL,
             title: `Match Dispute Triggered`,
-            message: `${dispute.reportedBy?.displayName || dispute.reportedBy?.discordName || 'A player'} reported a dispute in Match #${await this.resolveMatchNumber(tournamentId, matchId)} inside "${tournament?.name}".`,
+            message: `${dispute.reportedBy?.displayName || dispute.reportedBy?.discordName || 'A player'} reported a dispute in Match #${matchNumber} inside "${tournament?.name}".`,
             payload: { tournamentId, matchId },
           })),
         );
@@ -2254,7 +2244,7 @@ export class TournamentService {
     });
   }
 
-  async getMatchMessages(tournamentId: string, matchId: string, userId: string) {
+  async getMatchMessages(tournamentId: string, matchId: string) {
     const match = await this.prisma.match.findUnique({ where: { id: matchId } });
     if (!match) throw new NotFoundException('Match not found');
 
