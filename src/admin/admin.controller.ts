@@ -24,6 +24,11 @@ export class AdminController {
     return this.adminService.setBlacklist(userId, isOwnerBlacklisted);
   }
 
+  @Patch('users/:id/roles')
+  async setRoles(@Param('id') userId: string, @Body('roles') roles: UserRole[]) {
+    return this.adminService.setRoles(userId, roles);
+  }
+
   @Get('tournaments')
   async getTournaments() {
     return this.adminService.getTournaments();
