@@ -1851,7 +1851,11 @@ export class TournamentService {
           const oldLoserId = match.winnerId;
           let slot = !loserMatch.participant1Id ? 'participant1Id' : 'participant2Id';
 
-          if (loserMatch.participant1Id === oldLoserId) {
+          if (loserMatch.id === match.nextMatchId) {
+            // GRAND FINALS RESET trap: The winner was just placed in this exact match in the previous step.
+            // Ensure the loser goes into the opposite slot.
+            slot = loserMatch.participant1Id === match.winnerId ? 'participant2Id' : 'participant1Id';
+          } else if (loserMatch.participant1Id === oldLoserId) {
             slot = 'participant1Id';
           } else if (loserMatch.participant2Id === oldLoserId) {
             slot = 'participant2Id';
