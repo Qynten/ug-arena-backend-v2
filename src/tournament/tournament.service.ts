@@ -119,6 +119,7 @@ export class TournamentService {
           maxTeamSize: createTournamentDto.maxTeamSize,
           minTeamSize: createTournamentDto.minTeamSize,
           bracketType: createTournamentDto.bracketType,
+          randomizedSeating: createTournamentDto.randomizedSeating,
           allowSubstitutions: createTournamentDto.allowSubstitutions,
 
           owner: {
@@ -1117,16 +1118,17 @@ export class TournamentService {
           data: { wins: 0, losses: 0, draws: 0, points: 0, buchholzScore: 0, tiebreakerScore: 0 },
         });
 
-        // --- SEEDING PRE-FLIGHT: SOLO QUEUE AUTO-FILL ---
+        // --- SEEDING PRE-FLIGHT: SOLO QUEUE AUTO-FILL & EMPTY TEAM GENERATION ---
         if (tournament.type === TournamentType.TEAM) {
-          const solos = await prisma.participant.findMany({
-            where: {
-              tournamentId: tournament.id,
-              teamId: null,
-              status: ParticipantStatus.REGISTERED,
-            },
-            include: { user: true },
-          });
+          if (tournament.randomizedSeating) {
+            const solos = await prisma.participant.findMany({
+              where: {
+                tournamentId: tournament.id,
+                teamId: null,
+                status: ParticipantStatus.REGISTERED,
+              },
+              include: { user: true },
+            });
 
           if (solos.length > 0) {
             // Fetch ALL teams in the tournament
@@ -1244,6 +1246,33 @@ export class TournamentService {
               await prisma.participant.update({
                 where: { id: s.id },
                 data: { status: ParticipantStatus.CANCELLED },
+              });
+            }
+          }
+          } else {
+            // Organizer Seating: Only generate empty teams to match maxParticipants
+            const currentTotalTeamsCount = await prisma.participant.count({
+              where: {
+                tournamentId: tournament.id,
+                status: ParticipantStatus.REGISTERED,
+                teamId: { not: null },
+              },
+            });
+
+            const spotsAvailable = tournament.maxParticipants - currentTotalTeamsCount;
+            for (let i = 0; i < spotsAvailable; i++) {
+              const newTeam = await prisma.team.create({
+                data: {
+                  name: `TBD Squad ${Math.floor(Math.random() * 10000)}`,
+                  tournamentId: tournament.id,
+                },
+              });
+              await prisma.participant.create({
+                data: {
+                  tournamentId: tournament.id,
+                  teamId: newTeam.id,
+                  status: ParticipantStatus.REGISTERED,
+                },
               });
             }
           }
@@ -1425,19 +1454,21 @@ export class TournamentService {
             lMatches[lRoundsCount - 1][0].nextMatchId = gfMatches[0].id;
           }
 
-          // 4. Distribute P1
-          const round1Matches = wMatches[0];
-          let pIndex = 0;
-          for (let i = 0; i < round1Matches.length; i++) {
-            if (pIndex < shuffled.length) {
-              round1Matches[i].participant1Id = shuffled[pIndex++].id;
+          // 4. Distribute Participants
+          if (tournament.randomizedSeating) {
+            const round1Matches = wMatches[0];
+            let pIndex = 0;
+            for (let i = 0; i < round1Matches.length; i++) {
+              if (pIndex < shuffled.length) {
+                round1Matches[i].participant1Id = shuffled[pIndex++].id;
+              }
             }
-          }
 
-          // 5. Distribute P2
-          for (let i = 0; i < round1Matches.length; i++) {
-            if (pIndex < shuffled.length) {
-              round1Matches[i].participant2Id = shuffled[pIndex++].id;
+            // 5. Distribute P2
+            for (let i = 0; i < round1Matches.length; i++) {
+              if (pIndex < shuffled.length) {
+                round1Matches[i].participant2Id = shuffled[pIndex++].id;
+              }
             }
           }
 
@@ -1448,28 +1479,30 @@ export class TournamentService {
           });
 
           // 7. Auto-Resolve BYEs via database transactions
-          const createdMatches = await prisma.match.findMany({
-            where: { tournamentId: tournament.id, roundId: wRoundsData[0].id, branch: 'WINNERS' },
-          });
+          if (tournament.randomizedSeating) {
+            const createdMatches = await prisma.match.findMany({
+              where: { tournamentId: tournament.id, roundId: wRoundsData[0].id, branch: 'WINNERS' },
+            });
 
-          for (const m of createdMatches) {
-            if (m.participant1Id && !m.participant2Id) {
-              await prisma.match.update({
-                where: { id: m.id },
-                data: { status: 'COMPLETED', winnerId: m.participant1Id, p1Score: 1, p2Score: 0 },
-              });
-              await this.advanceWinner(
-                {
-                  id: m.id,
-                  winnerId: m.participant1Id,
-                  participant1Id: m.participant1Id,
-                  participant2Id: null,
-                  nextMatchId: m.nextMatchId,
-                  loserMoveToMatchId: m.loserMoveToMatchId,
-                },
-                prisma,
-                tournament.bracketType,
-              );
+            for (const m of createdMatches) {
+              if (m.participant1Id && !m.participant2Id) {
+                await prisma.match.update({
+                  where: { id: m.id },
+                  data: { status: 'COMPLETED', winnerId: m.participant1Id, p1Score: 1, p2Score: 0 },
+                });
+                await this.advanceWinner(
+                  {
+                    id: m.id,
+                    winnerId: m.participant1Id,
+                    participant1Id: m.participant1Id,
+                    participant2Id: null,
+                    nextMatchId: m.nextMatchId,
+                    loserMoveToMatchId: m.loserMoveToMatchId,
+                  },
+                  prisma,
+                  tournament.bracketType,
+                );
+              }
             }
           }
         } else if (tournament.bracketType === 'SWISS') {
@@ -1501,28 +1534,31 @@ export class TournamentService {
           }
 
           // Distribute Round 1 participants mapped by seeds
-          // We map top seed against bottom seed natively via shuffling in our logic
-          let pIndex = 0;
-          const round1Matches = sMatches.filter((m) => m.roundId === roundRecords[0].id);
-          for (let i = 0; i < round1Matches.length; i++) {
-            if (pIndex < participants.length)
-              round1Matches[i].participant1Id = participants[pIndex++].id;
-            if (pIndex < participants.length)
-              round1Matches[i].participant2Id = participants[pIndex++].id;
+          if (tournament.randomizedSeating) {
+            let pIndex = 0;
+            const round1Matches = sMatches.filter((m) => m.roundId === roundRecords[0].id);
+            for (let i = 0; i < round1Matches.length; i++) {
+              if (pIndex < participants.length)
+                round1Matches[i].participant1Id = participants[pIndex++].id;
+              if (pIndex < participants.length)
+                round1Matches[i].participant2Id = participants[pIndex++].id;
+            }
           }
 
           await prisma.match.createMany({ data: sMatches });
 
           // Resolve BYE if participants is odd natively
-          const createdR1 = await prisma.match.findMany({
-            where: { tournamentId: tournament.id, roundId: roundRecords[0].id },
-          });
-          for (const m of createdR1) {
-            if (m.participant1Id && !m.participant2Id) {
-              await prisma.match.update({
-                where: { id: m.id },
-                data: { status: 'COMPLETED', winnerId: m.participant1Id, p1Score: 1, p2Score: 0 },
-              });
+          if (tournament.randomizedSeating) {
+            const createdR1 = await prisma.match.findMany({
+              where: { tournamentId: tournament.id, roundId: roundRecords[0].id },
+            });
+            for (const m of createdR1) {
+              if (m.participant1Id && !m.participant2Id) {
+                await prisma.match.update({
+                  where: { id: m.id },
+                  data: { status: 'COMPLETED', winnerId: m.participant1Id, p1Score: 1, p2Score: 0 },
+                });
+              }
             }
           }
         } else if (tournament.bracketType === 'ROUND_ROBIN') {
@@ -1543,17 +1579,25 @@ export class TournamentService {
           const rrMatches: any[] = [];
           for (let r = 0; r < rounds; r++) {
             for (let i = 0; i < numTeams / 2; i++) {
-              const p1 = dummyArray[i];
-              const p2 = dummyArray[numTeams - 1 - i];
-              // Skip BYE matches in DB
-              if (p1.id === 'BYE' || p2.id === 'BYE') continue;
+              let p1Id = null;
+              let p2Id = null;
+
+              if (tournament.randomizedSeating) {
+                const p1 = dummyArray[i];
+                const p2 = dummyArray[numTeams - 1 - i];
+                // Skip BYE matches in DB
+                if (p1.id === 'BYE' || p2.id === 'BYE') continue;
+                
+                p1Id = p1.id;
+                p2Id = p2.id;
+              }
 
               rrMatches.push({
                 id: crypto.randomUUID(),
                 tournamentId: tournament.id,
                 roundId: roundRecords[r].id,
-                participant1Id: p1.id,
-                participant2Id: p2.id,
+                participant1Id: p1Id,
+                participant2Id: p2Id,
                 nextMatchId: null,
                 loserMoveToMatchId: null,
                 status: 'PENDING',
@@ -3158,7 +3202,7 @@ export class TournamentService {
         isDeleted: false,
         OR: [{ id: idOrSlug }, { slug: idOrSlug }],
       },
-      select: { id: true, ownerId: true },
+      select: { id: true, ownerId: true, status: true },
     });
 
     if (!tournament) throw new NotFoundException('Tournament not found.');
@@ -3228,6 +3272,16 @@ export class TournamentService {
         });
       }
 
+      // Restore to solo pool if it's SEEDING or REGISTRATION
+      if (tournament.status === 'SEEDING' || tournament.status === 'REGISTRATION') {
+        const exist = await prisma.participant.findFirst({ where: { tournamentId: tournament.id, userId: memberId } });
+        if (!exist) {
+          await prisma.participant.create({
+            data: { tournamentId: tournament.id, userId: memberId, status: 'REGISTERED' }
+          });
+        }
+      }
+
       // Check if captain was removed and reassign if necessary
       if (memberRecord.role === TeamPlayerRole.CAPTAIN) {
         const remainingPlayers = team.players.filter((p) => p.playerId !== memberId);
@@ -3260,6 +3314,90 @@ export class TournamentService {
       }
 
       return { message: `Player removed from team successfully.` };
+    });
+  }
+
+  async adminAddPlayerToTeam(idOrSlug: string, teamId: string, playerId: string, requesterId: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+      select: { id: true, ownerId: true, status: true, maxTeamSize: true, allowSubstitutions: true },
+    });
+
+    if (!tournament) throw new NotFoundException('Tournament not found.');
+
+    const isOwner = tournament.ownerId === requesterId;
+    const staff = await this.prisma.tournamentStaff.findFirst({
+      where: { tournamentId: tournament.id, userId: requesterId },
+    });
+    const userRoleObj = await this.prisma.user.findUnique({
+      where: { id: requesterId },
+      select: { roles: true },
+    });
+    const hasAdminRole =
+      userRoleObj?.roles?.includes('ADMIN') ||
+      userRoleObj?.roles?.includes('SUPER_ADMIN');
+    
+    if (!isOwner && !staff && !hasAdminRole) {
+      throw new ForbiddenException('Only the tournament organizer and staff can do this.');
+    }
+
+    if (tournament.status !== 'SEEDING') {
+      throw new BadRequestException('Players can only be manually added to teams during the seeding phase.');
+    }
+
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      include: { players: true, participants: true },
+    });
+
+    if (!team || team.isDeleted || team.tournamentId !== tournament.id) {
+      throw new NotFoundException('Team not found.');
+    }
+
+    const maxCapacity = tournament.maxTeamSize + (tournament.allowSubstitutions ? 1 : 0);
+    if (team.players.length >= maxCapacity) {
+      throw new BadRequestException('Team is already full.');
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      // Remove any solo participant records for this player
+      await prisma.participant.deleteMany({
+        where: { tournamentId: tournament.id, userId: playerId, teamId: null },
+      });
+
+      // Add as TeamPlayer
+      const role = team.players.length === 0 ? 'CAPTAIN' : 'MEMBER';
+      await prisma.teamPlayer.create({
+        data: {
+          teamId,
+          playerId,
+          role,
+        },
+      });
+
+      // If team already has a participant record, add to roster
+      if (team.participants.length > 0) {
+        const teamParticipant = team.participants[0];
+        await prisma.tournamentRoster.create({
+          data: {
+            participantId: teamParticipant.id,
+            userId: playerId,
+            role,
+          },
+        });
+
+        if (!teamParticipant.userId && role === 'CAPTAIN') {
+          await prisma.participant.update({
+            where: { id: teamParticipant.id },
+            data: { userId: playerId },
+          });
+        }
+      }
+
+      return { message: 'Player successfully added to the team.' };
     });
   }
 

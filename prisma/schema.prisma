@@ -86,6 +86,7 @@ model Tournament {
   imageMedia         Media?                  @relation("TournamentBanner", fields: [imageId], references: [id])
   type               TournamentType          @default(TEAM)
   bracketType        BracketType             @default(SINGLE_ELIMINATION)
+  randomizedSeating  Boolean                 @default(false)
   status             TournamentStatus        @default(DRAFT)
   regStart           DateTime?
   regEnd             DateTime?

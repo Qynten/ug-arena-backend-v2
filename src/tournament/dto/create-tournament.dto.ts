@@ -77,6 +77,11 @@ export class CreateTournamentDto {
   @IsOptional()
   bracketType?: BracketType;
 
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  randomizedSeating?: boolean;
+
   @IsDate()
   @IsOptional()
   @Type(() => Date)

@@ -116,6 +116,11 @@ export class UpdateTournamentDto {
   @IsOptional()
   bracketType?: BracketType;
 
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  randomizedSeating?: boolean;
+
   // --- Media ---
   @IsString()
   @IsOptional()
