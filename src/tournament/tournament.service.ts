@@ -1130,125 +1130,127 @@ export class TournamentService {
               include: { user: true },
             });
 
-          if (solos.length > 0) {
-            // Fetch ALL teams in the tournament
-            const allTeams = await prisma.team.findMany({
-              where: { tournamentId: tournament.id, isDeleted: false },
-              include: { players: true },
-            });
+            if (solos.length > 0) {
+              // Fetch ALL teams in the tournament
+              const allTeams = await prisma.team.findMany({
+                where: { tournamentId: tournament.id, isDeleted: false },
+                include: { players: true },
+              });
 
-            // Filter teams that actually have an open slot
-            const maxCapacity = tournament.maxTeamSize + (tournament.allowSubstitutions ? 1 : 0);
-            const openTeams = allTeams.filter((t) => t.players.length < maxCapacity);
+              // Filter teams that actually have an open slot
+              const maxCapacity = tournament.maxTeamSize + (tournament.allowSubstitutions ? 1 : 0);
+              const openTeams = allTeams.filter((t) => t.players.length < maxCapacity);
 
-            // 1. Fill existing open teams
-            for (const team of openTeams) {
-              let currentSize = team.players.length;
-              let addedSolos = false;
-              while (currentSize < maxCapacity && solos.length > 0) {
-                const soloParticipant = solos.shift()!;
-                await prisma.teamPlayer.create({
-                  data: {
-                    teamId: team.id,
-                    playerId: soloParticipant.userId!,
-                    role: TeamPlayerRole.MEMBER,
-                  },
-                });
-                await prisma.participant.delete({ where: { id: soloParticipant.id } }); // Remove solo participant record
-                currentSize++;
-                addedSolos = true;
+              // 1. Fill existing open teams
+              for (const team of openTeams) {
+                let currentSize = team.players.length;
+                let addedSolos = false;
+                while (currentSize < maxCapacity && solos.length > 0) {
+                  const soloParticipant = solos.shift()!;
+                  await prisma.teamPlayer.create({
+                    data: {
+                      teamId: team.id,
+                      playerId: soloParticipant.userId!,
+                      role: TeamPlayerRole.MEMBER,
+                    },
+                  });
+                  await prisma.participant.delete({ where: { id: soloParticipant.id } }); // Remove solo participant record
+                  currentSize++;
+                  addedSolos = true;
+                }
+
+                // If we injected solo players into this team, forcefully register/update them as participants!
+                if (addedSolos) {
+                  const newPlayers = await prisma.teamPlayer.findMany({
+                    where: { teamId: team.id },
+                  });
+
+                  // Ensure we don't violate unique teamId constraint if a cancelled participant record already exists
+                  await prisma.participant.deleteMany({
+                    where: { tournamentId: tournament.id, teamId: team.id },
+                  });
+
+                  await prisma.participant.create({
+                    data: {
+                      tournamentId: tournament.id,
+                      userId:
+                        newPlayers.find((p) => p.role === TeamPlayerRole.CAPTAIN)?.playerId ||
+                        newPlayers[0].playerId,
+                      teamId: team.id,
+                      status: ParticipantStatus.REGISTERED, // Ensure it's active
+                      rosters: {
+                        create: newPlayers.map((p) => ({
+                          userId: p.playerId,
+                          role: p.role,
+                        })),
+                      },
+                    },
+                  });
+                }
               }
 
-              // If we injected solo players into this team, forcefully register/update them as participants!
-              if (addedSolos) {
-                const newPlayers = await prisma.teamPlayer.findMany({ where: { teamId: team.id } });
+              // 2. Form new randomized teams from remaining solos
+              const currentTotalTeamsCount = await prisma.participant.count({
+                where: {
+                  tournamentId: tournament.id,
+                  status: ParticipantStatus.REGISTERED,
+                  teamId: { not: null },
+                },
+              });
 
-                // Ensure we don't violate unique teamId constraint if a cancelled participant record already exists
-                await prisma.participant.deleteMany({
-                  where: { tournamentId: tournament.id, teamId: team.id },
+              let teamsToCreate = 0;
+              if (solos.length > 0) {
+                const spotsAvailable = tournament.maxParticipants - currentTotalTeamsCount;
+                const possibleTeams = Math.ceil(solos.length / maxCapacity);
+                teamsToCreate = Math.min(spotsAvailable, possibleTeams);
+              }
+
+              for (let i = 0; i < teamsToCreate; i++) {
+                const size = Math.min(solos.length, maxCapacity);
+                const teamSolos = solos.splice(0, size);
+
+                const randomTeamName = `Arena Squad ${Math.floor(Math.random() * 10000)}`;
+                const newTeam = await prisma.team.create({
+                  data: {
+                    name: randomTeamName,
+                    tournamentId: tournament.id,
+                    players: {
+                      create: teamSolos.map((s, idx) => ({
+                        playerId: s.userId!,
+                        role: idx === 0 ? TeamPlayerRole.CAPTAIN : TeamPlayerRole.MEMBER,
+                      })),
+                    },
+                  },
                 });
+
+                for (const s of teamSolos) {
+                  await prisma.participant.delete({ where: { id: s.id } }); // Remove solo participant record
+                }
 
                 await prisma.participant.create({
                   data: {
                     tournamentId: tournament.id,
-                    userId:
-                      newPlayers.find((p) => p.role === TeamPlayerRole.CAPTAIN)?.playerId ||
-                      newPlayers[0].playerId,
-                    teamId: team.id,
-                    status: ParticipantStatus.REGISTERED, // Ensure it's active
+                    userId: teamSolos[0].userId!, // Direct use avoids undefined indexing from generated includes
+                    teamId: newTeam.id,
+                    status: ParticipantStatus.REGISTERED,
                     rosters: {
-                      create: newPlayers.map((p) => ({
-                        userId: p.playerId,
-                        role: p.role,
+                      create: teamSolos.map((s, idx) => ({
+                        userId: s.userId!,
+                        role: idx === 0 ? TeamPlayerRole.CAPTAIN : TeamPlayerRole.MEMBER,
                       })),
                     },
                   },
                 });
               }
-            }
 
-            // 2. Form new randomized teams from remaining solos
-            const currentTotalTeamsCount = await prisma.participant.count({
-              where: {
-                tournamentId: tournament.id,
-                status: ParticipantStatus.REGISTERED,
-                teamId: { not: null },
-              },
-            });
-
-            let teamsToCreate = 0;
-            if (solos.length > 0) {
-              const spotsAvailable = tournament.maxParticipants - currentTotalTeamsCount;
-              const possibleTeams = Math.ceil(solos.length / maxCapacity);
-              teamsToCreate = Math.min(spotsAvailable, possibleTeams);
-            }
-
-            for (let i = 0; i < teamsToCreate; i++) {
-              const size = Math.min(solos.length, maxCapacity);
-              const teamSolos = solos.splice(0, size);
-
-              const randomTeamName = `Arena Squad ${Math.floor(Math.random() * 10000)}`;
-              const newTeam = await prisma.team.create({
-                data: {
-                  name: randomTeamName,
-                  tournamentId: tournament.id,
-                  players: {
-                    create: teamSolos.map((s, idx) => ({
-                      playerId: s.userId!,
-                      role: idx === 0 ? TeamPlayerRole.CAPTAIN : TeamPlayerRole.MEMBER,
-                    })),
-                  },
-                },
-              });
-
-              for (const s of teamSolos) {
-                await prisma.participant.delete({ where: { id: s.id } }); // Remove solo participant record
+              // 3. Any solos STILL remaining are cancelled.
+              for (const s of solos) {
+                await prisma.participant.update({
+                  where: { id: s.id },
+                  data: { status: ParticipantStatus.CANCELLED },
+                });
               }
-
-              await prisma.participant.create({
-                data: {
-                  tournamentId: tournament.id,
-                  userId: teamSolos[0].userId!, // Direct use avoids undefined indexing from generated includes
-                  teamId: newTeam.id,
-                  status: ParticipantStatus.REGISTERED,
-                  rosters: {
-                    create: teamSolos.map((s, idx) => ({
-                      userId: s.userId!,
-                      role: idx === 0 ? TeamPlayerRole.CAPTAIN : TeamPlayerRole.MEMBER,
-                    })),
-                  },
-                },
-              });
             }
-
-            // 3. Any solos STILL remaining are cancelled.
-            for (const s of solos) {
-              await prisma.participant.update({
-                where: { id: s.id },
-                data: { status: ParticipantStatus.CANCELLED },
-              });
-            }
-          }
           } else {
             // Organizer Seating: Only generate empty teams to match maxParticipants
             const currentTotalTeamsCount = await prisma.participant.count({
@@ -1587,7 +1589,7 @@ export class TournamentService {
                 const p2 = dummyArray[numTeams - 1 - i];
                 // Skip BYE matches in DB
                 if (p1.id === 'BYE' || p2.id === 'BYE') continue;
-                
+
                 p1Id = p1.id;
                 p2Id = p2.id;
               }
@@ -1898,7 +1900,8 @@ export class TournamentService {
           if (loserMatch.id === match.nextMatchId) {
             // GRAND FINALS RESET trap: The winner was just placed in this exact match in the previous step.
             // Ensure the loser goes into the opposite slot.
-            slot = loserMatch.participant1Id === match.winnerId ? 'participant2Id' : 'participant1Id';
+            slot =
+              loserMatch.participant1Id === match.winnerId ? 'participant2Id' : 'participant1Id';
           } else if (loserMatch.participant1Id === oldLoserId) {
             slot = 'participant1Id';
           } else if (loserMatch.participant2Id === oldLoserId) {
@@ -3274,10 +3277,12 @@ export class TournamentService {
 
       // Restore to solo pool if it's SEEDING or REGISTRATION
       if (tournament.status === 'SEEDING' || tournament.status === 'REGISTRATION') {
-        const exist = await prisma.participant.findFirst({ where: { tournamentId: tournament.id, userId: memberId } });
+        const exist = await prisma.participant.findFirst({
+          where: { tournamentId: tournament.id, userId: memberId },
+        });
         if (!exist) {
           await prisma.participant.create({
-            data: { tournamentId: tournament.id, userId: memberId, status: 'REGISTERED' }
+            data: { tournamentId: tournament.id, userId: memberId, status: 'REGISTERED' },
           });
         }
       }
@@ -3317,13 +3322,24 @@ export class TournamentService {
     });
   }
 
-  async adminAddPlayerToTeam(idOrSlug: string, teamId: string, playerId: string, requesterId: string) {
+  async adminAddPlayerToTeam(
+    idOrSlug: string,
+    teamId: string,
+    playerId: string,
+    requesterId: string,
+  ) {
     const tournament = await this.prisma.tournament.findFirst({
       where: {
         isDeleted: false,
         OR: [{ id: idOrSlug }, { slug: idOrSlug }],
       },
-      select: { id: true, ownerId: true, status: true, maxTeamSize: true, allowSubstitutions: true },
+      select: {
+        id: true,
+        ownerId: true,
+        status: true,
+        maxTeamSize: true,
+        allowSubstitutions: true,
+      },
     });
 
     if (!tournament) throw new NotFoundException('Tournament not found.');
@@ -3337,15 +3353,16 @@ export class TournamentService {
       select: { roles: true },
     });
     const hasAdminRole =
-      userRoleObj?.roles?.includes('ADMIN') ||
-      userRoleObj?.roles?.includes('SUPER_ADMIN');
-    
+      userRoleObj?.roles?.includes('ADMIN') || userRoleObj?.roles?.includes('SUPER_ADMIN');
+
     if (!isOwner && !staff && !hasAdminRole) {
       throw new ForbiddenException('Only the tournament organizer and staff can do this.');
     }
 
     if (tournament.status !== 'SEEDING') {
-      throw new BadRequestException('Players can only be manually added to teams during the seeding phase.');
+      throw new BadRequestException(
+        'Players can only be manually added to teams during the seeding phase.',
+      );
     }
 
     const team = await this.prisma.team.findUnique({
@@ -3609,7 +3626,10 @@ export class TournamentService {
   }
 
   async notifyParticipants(tournamentId: string, userId: string, message?: string) {
-    await this.checkOwnership(tournamentId, { id: userId, roles: [UserRole.ADMIN, UserRole.SUPER_ADMIN] });
+    await this.checkOwnership(tournamentId, {
+      id: userId,
+      roles: [UserRole.ADMIN, UserRole.SUPER_ADMIN],
+    });
 
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },

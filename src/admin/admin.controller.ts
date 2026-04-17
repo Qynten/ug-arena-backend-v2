@@ -34,10 +34,7 @@ export class AdminController {
   }
 
   @Patch('tournaments/:id/featured')
-  async toggleFeatured(
-    @Param('id') tournamentId: string,
-    @Body('isFeatured') isFeatured: boolean,
-  ) {
+  async toggleFeatured(@Param('id') tournamentId: string, @Body('isFeatured') isFeatured: boolean) {
     return this.adminService.setFeatured(tournamentId, isFeatured);
   }
 }
