@@ -112,8 +112,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return { status: 'error', message: 'You must be a participant to call admin' };
       }
 
-      const messageContent =
-        payload.content?.trim() || `[Admin Call] ${payload.issueType}`;
+      const messageContent = payload.content?.trim() || `[Admin Call] ${payload.issueType}`;
 
       const message = await this.chatService.createMessage(
         payload.tournamentId,
@@ -162,7 +161,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.chatService.deleteMessage(payload.messageId, user.id);
 
       // Notify all room members so they can hide the message in real time
-      this.server.to(payload.tournamentId).emit('chatMessageDeleted', { messageId: payload.messageId });
+      this.server
+        .to(payload.tournamentId)
+        .emit('chatMessageDeleted', { messageId: payload.messageId });
 
       return { status: 'success' };
     } catch (error: any) {

@@ -33,10 +33,7 @@ export class DisputeGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('joinMatchRoom')
-  async handleJoinRoom(
-    @MessageBody('matchId') matchId: string,
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleJoinRoom(@MessageBody('matchId') matchId: string, @ConnectedSocket() client: Socket) {
     const user = (client as any).user;
 
     try {
@@ -124,7 +121,15 @@ export class DisputeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('broadcastVoteUpdate')
   async handleVoteUpdate(
-    @MessageBody() payload: { teamId: string; action: string; type: string; targetId: string; voterId: string; executedFor: string | null },
+    @MessageBody()
+    payload: {
+      teamId: string;
+      action: string;
+      type: string;
+      targetId: string;
+      voterId: string;
+      executedFor: string | null;
+    },
     @ConnectedSocket() client: Socket,
   ) {
     const user = (client as any).user;

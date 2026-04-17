@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '@prisma/client';
 import { NotificationsGateway } from './notifications.gateway';
@@ -48,7 +54,13 @@ export class NotificationsService {
   /**
    * Centralized method to create a notification and emit real-time event
    */
-  async create(data: { userId: string; type: NotificationType; title: string; message: string; payload?: any }) {
+  async create(data: {
+    userId: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    payload?: any;
+  }) {
     const notification = await this.prisma.notification.create({
       data: {
         userId: data.userId,
@@ -68,12 +80,18 @@ export class NotificationsService {
   /**
    * Centralized method to create multiple notifications and emit real-time events
    */
-  async createMany(notificationsData: Array<{ userId: string; type: NotificationType; title: string; message: string; payload?: any }>) {
+  async createMany(
+    notificationsData: Array<{
+      userId: string;
+      type: NotificationType;
+      title: string;
+      message: string;
+      payload?: any;
+    }>,
+  ) {
     // Prisma createMany doesn't return the created objects with IDs on all DBs,
     // so we iterate or perform a fetch. For simplicity and reliability in emissions:
-    const created = await Promise.all(
-      notificationsData.map(d => this.create(d))
-    );
+    const created = await Promise.all(notificationsData.map((d) => this.create(d)));
     return created;
   }
 

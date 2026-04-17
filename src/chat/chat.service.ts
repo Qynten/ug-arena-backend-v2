@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatMessageType, TournamentRoleType, NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -33,7 +39,10 @@ export class ChatService {
    * canWrite = participant, staff, or owner
    * Any authenticated user gets canAccess=true (read-only if not participant)
    */
-  async verifyAccess(userId: string, tournamentId: string): Promise<{ canAccess: boolean; canWrite: boolean; isStaff: boolean }> {
+  async verifyAccess(
+    userId: string,
+    tournamentId: string,
+  ): Promise<{ canAccess: boolean; canWrite: boolean; isStaff: boolean }> {
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
       include: {
@@ -161,9 +170,9 @@ export class ChatService {
   async getAdminCalls(tournamentId: string) {
     return this.prisma.tournamentChatMessage.findMany({
       where: { tournamentId, type: ChatMessageType.ADMIN_CALL, isDeleted: false },
-      include: { 
+      include: {
         sender: { select: SENDER_SELECT },
-        resolvedBy: { select: SENDER_SELECT }
+        resolvedBy: { select: SENDER_SELECT },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -172,7 +181,12 @@ export class ChatService {
   /**
    * Resolves an active Admin Call and notifies the room.
    */
-  async resolveAdminCall(tournamentId: string, messageId: string, resolvedById: string, response: string) {
+  async resolveAdminCall(
+    tournamentId: string,
+    messageId: string,
+    resolvedById: string,
+    response: string,
+  ) {
     const access = await this.verifyAccess(resolvedById, tournamentId);
     if (!access.isStaff) {
       throw new ForbiddenException('Only staff can resolve admin calls');
@@ -188,10 +202,10 @@ export class ChatService {
     });
 
     this.chatGateway.server.to(tournamentId).emit('adminCallResolved', {
-       messageId,
-       isResolved: true,
-       response,
-       resolvedBy: msg.resolvedBy
+      messageId,
+      isResolved: true,
+      response,
+      resolvedBy: msg.resolvedBy,
     });
 
     return msg;

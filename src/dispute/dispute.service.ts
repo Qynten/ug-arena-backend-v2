@@ -99,34 +99,33 @@ export class DisputeService {
   }
   async verifyUserCanAccessTeam(userId: string, teamId: string): Promise<boolean> {
     const isMember = await this.prisma.teamPlayer.findFirst({
-      where: { teamId, playerId: userId }
+      where: { teamId, playerId: userId },
     });
     if (isMember) return true;
 
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },
-      include: { tournament: { select: { ownerId: true } } }
+      include: { tournament: { select: { ownerId: true } } },
     });
     if (!team) return false;
 
     if (team.tournament.ownerId === userId) return true;
 
     const staffCheck = await this.prisma.tournamentStaff.findFirst({
-      where: { tournamentId: team.tournamentId, userId }
+      where: { tournamentId: team.tournamentId, userId },
     });
     if (staffCheck) return true;
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { roles: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { roles: true },
+    });
     if (user?.roles?.includes('ADMIN') || user?.roles?.includes('SUPER_ADMIN')) return true;
 
     return false;
   }
 
-  async createTeamMessage(
-    teamId: string,
-    senderId: string,
-    content: string,
-  ) {
+  async createTeamMessage(teamId: string, senderId: string, content: string) {
     const hasAccess = await this.verifyUserCanAccessTeam(senderId, teamId);
     if (!hasAccess) {
       throw new ForbiddenException('User does not have access to this team chat');

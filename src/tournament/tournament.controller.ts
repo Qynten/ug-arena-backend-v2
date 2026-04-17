@@ -243,10 +243,7 @@ export class TournamentController {
 
   @Get(':id/teams/:teamId/messages')
   @UseGuards(JwtAuthGuard)
-  getTeamMessages(
-    @Param('teamId') teamId: string,
-    @GetUser('id') userId: string,
-  ) {
+  getTeamMessages(@Param('teamId') teamId: string, @GetUser('id') userId: string) {
     return this.tournamentService.getTeamMessages(teamId, userId);
   }
 
@@ -265,7 +262,7 @@ export class TournamentController {
   openTeamDispute(
     @Param('teamId') teamId: string,
     @GetUser('id') userId: string,
-    @Body() body: { reason?: string; context?: string }
+    @Body() body: { reason?: string; context?: string },
   ) {
     return this.tournamentService.openTeamDispute(teamId, userId, body.reason, body.context);
   }
@@ -374,7 +371,7 @@ export class TournamentController {
     @Param('id') id: string,
     @Param('matchId') matchId: string,
     @GetUser('id') userId: string,
-    @Body() body: { reason?: string; context?: string }
+    @Body() body: { reason?: string; context?: string },
   ) {
     return this.tournamentService.openDispute(id, matchId, userId, body?.reason, body?.context);
   }
