@@ -1399,20 +1399,22 @@ export class TournamentService {
               status: 'PENDING',
               branch: 'GRAND_FINALS',
             });
-            gfMatches.push({
-              id: crypto.randomUUID(),
-              tournamentId: tournament.id,
-              roundId: gfRound!.id,
-              participant1Id: null,
-              participant2Id: null,
-              nextMatchId: null,
-              loserMoveToMatchId: null,
-              status: 'PENDING',
-              branch: 'GRAND_FINALS_RESET',
-            });
-            // Link GF 1 to GF 2 (Both the Winner and Loser advance IF the loser survives)
-            gfMatches[0].nextMatchId = gfMatches[1].id;
-            gfMatches[0].loserMoveToMatchId = gfMatches[1].id;
+            if (tournament.hasGrandFinalRematch) {
+              gfMatches.push({
+                id: crypto.randomUUID(),
+                tournamentId: tournament.id,
+                roundId: gfRound!.id,
+                participant1Id: null,
+                participant2Id: null,
+                nextMatchId: null,
+                loserMoveToMatchId: null,
+                status: 'PENDING',
+                branch: 'GRAND_FINALS_RESET',
+              });
+              // Link GF 1 to GF 2 (Both the Winner and Loser advance IF the loser survives)
+              gfMatches[0].nextMatchId = gfMatches[1].id;
+              gfMatches[0].loserMoveToMatchId = gfMatches[1].id;
+            }
           }
 
           // 3. Link nextMatchId & loserMoveToMatchId
