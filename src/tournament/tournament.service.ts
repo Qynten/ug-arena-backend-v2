@@ -91,6 +91,15 @@ export class TournamentService {
 
   // 2. The logic from your old script.ts for creating a tournament
   async create(createTournamentDto: CreateTournamentDto, ownerId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { isOwnerBlacklisted: true },
+    });
+
+    if (user?.isOwnerBlacklisted) {
+      throw new ForbiddenException('Banned from Creating Tournaments');
+    }
+
     const slug = await this.generateUniqueSlug(createTournamentDto.name);
 
     try {
