@@ -10,7 +10,6 @@ import { PartyModule } from './party/party.module';
 import { DisputeModule } from './dispute/dispute.module';
 import { MediaModule } from './media/media.module';
 import { ChatModule } from './chat/chat.module';
-import { RolesGuard } from './common/guards/roles.guard';
 import { AdminModule } from './admin/admin.module';
 
 @Module({
@@ -28,11 +27,6 @@ import { AdminModule } from './admin/admin.module';
     AdminModule,
   ],
   controllers: [],
-  providers: [
-    {
-      provide: APP_GUARD,
-      useClass: RolesGuard,
-    },
-  ],
+  providers: [],
 })
 export class AppModule {}
