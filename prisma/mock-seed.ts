@@ -219,9 +219,65 @@ async function main() {
     });
     mockUserIds.push(...mockSolos.map((u) => u.id));
 
+    // Get Participant IDs to delete their match histories and references
+    const mockParticipants = await prisma.participant.findMany({
+      where: { tournamentId: tournamentIdToClear, userId: { in: mockUserIds } },
+      select: { id: true },
+    });
+    const mockParticipantIds = mockParticipants.map((p) => p.id);
+
+    // Cleanup Match History
+    await prisma.matchHistory.deleteMany({
+      where: {
+        OR: [
+          { participantId: { in: mockParticipantIds } },
+          { opponentId: { in: mockParticipantIds } },
+        ],
+      },
+    });
+
+    // Cleanup Scores
+    await prisma.score.deleteMany({
+      where: {
+        OR: [
+          { firstParticipantId: { in: mockParticipantIds } },
+          { secondParticipantId: { in: mockParticipantIds } },
+        ],
+      },
+    });
+
+    // Nullify match references
+    await prisma.match.updateMany({
+      where: { participant1Id: { in: mockParticipantIds } },
+      data: { participant1Id: null },
+    });
+    await prisma.match.updateMany({
+      where: { participant2Id: { in: mockParticipantIds } },
+      data: { participant2Id: null },
+    });
+
+    // Remove from Prize Pools
+    await prisma.prizePool.updateMany({
+      where: { winnerId: { in: mockParticipantIds } },
+      data: { winnerId: null },
+    });
+
+    // Clean up team players and rosters (prevent foreign key errors)
+    await prisma.teamPlayer.deleteMany({
+      where: { playerId: { in: mockUserIds } },
+    });
+
+    await prisma.teamPlayerRegistration.deleteMany({
+      where: { playerId: { in: mockUserIds } },
+    });
+
+    await prisma.tournamentRoster.deleteMany({
+      where: { userId: { in: mockUserIds } },
+    });
+
     // Delete participants matching these users
     await prisma.participant.deleteMany({
-      where: { tournamentId: tournamentIdToClear, userId: { in: mockUserIds } },
+      where: { id: { in: mockParticipantIds } },
     });
 
     await prisma.team.deleteMany({
