@@ -321,7 +321,9 @@ export class TournamentService {
     const mappedData = data.map((t) => {
       let rankings: string[] = [];
       if (t.status === 'COMPLETED' && (t as any).participants) {
-        rankings = (t as any).participants.map((p: any) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA');
+        rankings = (t as any).participants.map(
+          (p: any) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA',
+        );
       }
       const { ...rest } = t;
       // We can leave participants in the payload or remove it, we'll strip it cleanly here.
@@ -371,7 +373,9 @@ export class TournamentService {
     const mappedData = data.map((t) => {
       let rankings: string[] = [];
       if (t.status === 'COMPLETED' && (t as any).participants) {
-        rankings = (t as any).participants.map((p: any) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA');
+        rankings = (t as any).participants.map(
+          (p: any) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA',
+        );
       }
       const { ...rest } = t;
       delete (rest as any).participants;
@@ -450,7 +454,9 @@ export class TournamentService {
       },
     });
 
-    return participants.map((p) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA');
+    return participants.map(
+      (p) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA',
+    );
   }
 
   async update(id: string, updateTournamentDto: UpdateTournamentDto, user: any) {
