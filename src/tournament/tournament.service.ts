@@ -282,6 +282,20 @@ export class TournamentService {
           _count: {
             select: { participants: { where: { status: { not: ParticipantStatus.CANCELLED } } } },
           },
+          participants: {
+            where: { status: { not: ParticipantStatus.CANCELLED } },
+            orderBy: [
+              { points: 'desc' },
+              { wins: 'desc' },
+              { tiebreakerScore: 'desc' },
+              { buchholzScore: 'desc' },
+            ],
+            take: 3,
+            include: {
+              team: { select: { name: true } },
+              user: { select: { discordName: true, displayName: true } },
+            },
+          },
           staff: {
             include: {
               user: {
@@ -304,7 +318,18 @@ export class TournamentService {
       this.prisma.tournament.count({ where: whereClause }),
     ]);
 
-    return { data, meta: { total, page, limit } };
+    const mappedData = data.map((t) => {
+      let rankings: string[] = [];
+      if (t.status === 'COMPLETED' && (t as any).participants) {
+        rankings = (t as any).participants.map((p: any) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA');
+      }
+      const { ...rest } = t;
+      // We can leave participants in the payload or remove it, we'll strip it cleanly here.
+      delete (rest as any).participants;
+      return { ...rest, rankings };
+    });
+
+    return { data: mappedData, meta: { total, page, limit } };
   }
 
   // 3. The logic from your old script.ts for fetching tournaments
@@ -322,6 +347,20 @@ export class TournamentService {
           _count: {
             select: { participants: { where: { status: { not: ParticipantStatus.CANCELLED } } } },
           },
+          participants: {
+            where: { status: { not: ParticipantStatus.CANCELLED } },
+            orderBy: [
+              { points: 'desc' },
+              { wins: 'desc' },
+              { tiebreakerScore: 'desc' },
+              { buchholzScore: 'desc' },
+            ],
+            take: 3,
+            include: {
+              team: { select: { name: true } },
+              user: { select: { discordName: true, displayName: true } },
+            },
+          },
         },
         skip,
         take: limit,
@@ -329,7 +368,17 @@ export class TournamentService {
       this.prisma.tournament.count({ where: { isDeleted: false } }),
     ]);
 
-    return { data, meta: { total, page, limit } };
+    const mappedData = data.map((t) => {
+      let rankings: string[] = [];
+      if (t.status === 'COMPLETED' && (t as any).participants) {
+        rankings = (t as any).participants.map((p: any) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA');
+      }
+      const { ...rest } = t;
+      delete (rest as any).participants;
+      return { ...rest, rankings };
+    });
+
+    return { data: mappedData, meta: { total, page, limit } };
   }
 
   // (NestJS generated these placeholders for you to fill out later)
@@ -368,6 +417,40 @@ export class TournamentService {
     }
 
     return tournament;
+  }
+
+  async getRankings(idOrSlug: string) {
+    const tournament = await this.prisma.tournament.findFirst({
+      where: {
+        isDeleted: false,
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+      select: { id: true, status: true },
+    });
+
+    if (!tournament) {
+      throw new NotFoundException(`Tournament with ID or slug ${idOrSlug} not found.`);
+    }
+
+    if (tournament.status !== 'COMPLETED') {
+      return [];
+    }
+
+    const participants = await this.prisma.participant.findMany({
+      where: { tournamentId: tournament.id, status: { not: ParticipantStatus.CANCELLED } },
+      orderBy: [
+        { points: 'desc' },
+        { wins: 'desc' },
+        { tiebreakerScore: 'desc' },
+        { buchholzScore: 'desc' },
+      ],
+      include: {
+        team: { select: { name: true } },
+        user: { select: { discordName: true, displayName: true } },
+      },
+    });
+
+    return participants.map((p) => p.team?.name || p.user?.displayName || p.user?.discordName || 'TBA');
   }
 
   async update(id: string, updateTournamentDto: UpdateTournamentDto, user: any) {

@@ -328,6 +328,11 @@ export class TournamentController {
     return this.tournamentService.findOne(id);
   }
 
+  @Get(':id/rankings')
+  getRankings(@Param('id') id: string) {
+    return this.tournamentService.getRankings(id);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
